@@ -1,0 +1,170 @@
+{
+  "name": "inpaas-source-tools",
+  "displayName": "inPaaS Studio Tools",
+  "description": "Integração local do VS Code com sources, forms e entities existentes na plataforma inPaaS.",
+  "version": "0.6.9",
+  "publisher": "inpaas-local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:inpaas.downloadSource",
+    "onCommand:inpaas.downloadForm",
+    "onCommand:inpaas.downloadEntity",
+    "onCommand:inpaas.copyKey",
+    "onCommand:inpaas.downloadOrUpdateResource",
+    "onCommand:inpaas.publishResource",
+    "onCommand:inpaas.newQuery",
+    "onCommand:inpaas.executeQuery",
+    "onCommand:inpaas.formatSql",
+    "onCommand:inpaas.refreshDatabaseMetadata",
+    "onCommand:inpaas.openIncludedForm",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact",
+    "onLanguage:html",
+    "onLanguage:vue",
+    "onLanguage:sql"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "inpaas.downloadSource",
+        "title": "Baixar source",
+        "category": "inPaaS"
+      },
+      {
+        "command": "inpaas.downloadForm",
+        "title": "Baixar form",
+        "category": "inPaaS"
+      },
+      {
+        "command": "inpaas.downloadEntity",
+        "title": "Baixar entity",
+        "category": "inPaaS"
+      },
+      {
+        "command": "inpaas.copyKey",
+        "title": "inPaaS: Copy Key"
+      },
+      {
+        "command": "inpaas.downloadOrUpdateResource",
+        "title": "inPaaS: Download"
+      },
+      {
+        "command": "inpaas.publishResource",
+        "title": "inPaaS: Publish"
+      },
+      {
+        "command": "inpaas.newQuery",
+        "title": "Nova query",
+        "category": "inPaaS"
+      },
+      {
+        "command": "inpaas.executeQuery",
+        "title": "Executar query",
+        "category": "inPaaS"
+      },
+      {
+        "command": "inpaas.formatSql",
+        "title": "Formatar SQL",
+        "category": "inPaaS"
+      },
+      {
+        "command": "inpaas.refreshDatabaseMetadata",
+        "title": "Atualizar metadados do banco",
+        "category": "inPaaS"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "inpaas.copyKey",
+          "when": "resourceScheme == file",
+          "group": "inpaas@1"
+        },
+        {
+          "command": "inpaas.downloadOrUpdateResource",
+          "when": "resourceScheme == file",
+          "group": "inpaas@2"
+        },
+        {
+          "command": "inpaas.publishResource",
+          "when": "resourceScheme == file",
+          "group": "inpaas@3"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "inpaas.executeQuery",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && editorLangId == sql"
+      },
+      {
+        "command": "inpaas.executeQuery",
+        "key": "f5",
+        "when": "editorTextFocus && editorLangId == sql"
+      },
+      {
+        "command": "inpaas.formatSql",
+        "key": "shift+alt+f",
+        "when": "editorTextFocus && editorLangId == sql"
+      }
+    ],
+    "configuration": {
+      "title": "inPaaS",
+      "properties": {
+        "inpaas.serverUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8080",
+          "description": "URL do servidor local da integração inPaaS."
+        },
+        "inpaas.sourceDownloadPath": {
+          "type": "string",
+          "default": "/__platform/source",
+          "description": "Endpoint local usado para baixar um source."
+        },
+        "inpaas.formDownloadPath": {
+          "type": "string",
+          "default": "/__platform/form",
+          "description": "Endpoint local usado para baixar um form."
+        },
+        "inpaas.publishPath": {
+          "type": "string",
+          "default": "/__platform/publish",
+          "description": "Endpoint local usado para publicar manualmente um source ou form."
+        },
+        "inpaas.entityDownloadPath": {
+          "type": "string",
+          "default": "/api/entity-management/entities/{entityName}/xml",
+          "description": "Endpoint usado para baixar o XML de uma entidade."
+        },
+        "inpaas.entityDirectory": {
+          "type": "string",
+          "default": "entities",
+          "description": "Pasta de entities relativa à raiz do workspace."
+        },
+        "inpaas.sourceDirectory": {
+          "type": "string",
+          "default": "source",
+          "description": "Pasta de sources relativa à raiz do workspace."
+        },
+        "inpaas.databaseQueryPath": {
+          "type": "string",
+          "default": "/api/studio/dbexplorer/v2/run",
+          "description": "Endpoint usado para executar queries paginadas."
+        },
+        "inpaas.databaseMetadataPath": {
+          "type": "string",
+          "default": "/eai/services/DatabaseExplorerUtils/getTablesHint",
+          "description": "Endpoint usado para carregar tabelas e colunas do autocomplete SQL."
+        }
+      }
+    }
+  }
+}
