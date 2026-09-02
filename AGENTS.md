@@ -9,6 +9,10 @@ Antes de atuar em qualquer projeto que referencie este kit, leia integralmente:
 - `docs/form-data-binding.md` quando fields forem ligados a entities ou o trabalho envolver save e mestre-detalhe;
 - `docs/corporate-identification.md` quando o trabalho envolver busca ou identificação corporativa de pessoas;
 - `docs/frontend-plugins.md` quando houver HTML, CSS ou plugins JavaScript/jQuery;
+- `docs/labels.md` quando o trabalho envolver criação, alteração, consulta ou
+  remoção de labels e traduções;
+- `docs/import-layouts.md` quando o trabalho envolver arquivos de entrada,
+  criação de layouts de importação ou mapeamento de colunas para entidades;
 - o `AGENTS.md` próprio do projeto para regras funcionais e decisões locais.
 
 ## Fonte oficial

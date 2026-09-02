@@ -138,6 +138,27 @@ entities/
 - No Explorer, `Download/Update` reconhece o XML em `entities/`, obtém o nome
   físico pelo atributo `name` e baixa novamente a entidade.
 
+#### Convenções para atributos
+
+- Campos que representam código corporativo ou código externo de integração
+  usam o nome físico `DS_INTEGRATIONCODE`, com alias `integrationcode`.
+- Valores textuais são modelados como `VARCHAR`, com nome físico iniciado por
+  `DS_` e alias sem o prefixo, em minúsculas. Exemplo:
+  `<attribute alias="nickname" audit="true" name="DS_NICKNAME" required="false" searchable="false" size="100" type="VARCHAR"/>`.
+- Ao complementar uma entidade, preservar a chave primária e os metadados já
+  existentes e seguir atributos equivalentes do próprio projeto para definir
+  alias, tamanho, obrigatoriedade, auditoria e pesquisa.
+- `searchable="true"` solicita infraestrutura de pesquisa full-text durante a
+  instalação do pacote; não significa apenas que a coluna poderá ser usada em
+  filtros SQL comuns. Não habilitar implicitamente esse atributo nem criar
+  índices de busca para entidades de carga ou histórico. Usar
+  `searchable="false"` salvo quando o usuário pedir pesquisa full-text e o tipo
+  da coluna for compatível. Em especial, tipos numéricos como `INT` não podem
+  compor um índice full-text do SQL Server.
+- Quando o nome físico, alias, tamanho ou outra característica não puder ser
+  inferida com segurança, pedir ao usuário um exemplo de campo ou entidade que
+  represente o padrão esperado antes de decidir.
+
 ## Existência obrigatória no Studio
 
 O fluxo local não cadastra recursos. A chave, módulo, engine, pattern, tipo e metadados são definidos no Studio. Um arquivo criado manualmente sem cadastro correspondente deve falhar ao publicar.

@@ -324,6 +324,32 @@ em [`../references/platform-form-runtime/ORIGIN.md`](../references/platform-form
 Na plataforma Java, forms tradicionais são atendidos por `FormController`,
 registrado em `/forms` e `/forms/*`.
 
+### Fichas somente leitura com pattern
+
+Um form HTML usado como ficha pode manter `<fields/>` vazio e montar seus dados
+no `beforeRender` do `DynaFormBusinessDelegate`. O registro selecionado costuma
+chegar no `TO data` pela PK física em minúsculas; quando a entity também define
+um alias para a PK, um pattern reutilizável pode tolerar ambos explicitamente.
+
+O contrato recomendado é manter consulta e apresentação separadas:
+
+1. ler a PK recebida pelo `beforeRender`;
+2. consultar o registro principal;
+3. consultar as coleções relacionadas pela chave física ou lógica definida no
+   projeto;
+4. formatar datas e valores de domínio no backend;
+5. publicar objetos com `data.put(...)` para o Mustache apenas apresentar.
+
+Quando o projeto adotar Knex, finalizar consultas de coleção com `.find()` e
+consultas unitárias com `.first()`. Não confundir relacionamento lógico com FK:
+uma lista histórica pode ser obtida por um código legado compartilhado mesmo
+quando a entity não declara referência física.
+
+Para conteúdo textual legado, não recorrer a Mustache sem escape apenas para
+preservar `<br>`. É mais seguro normalizar essas tags para `\n` no pattern e
+renderizar com Mustache comum dentro de um elemento com
+`white-space: pre-wrap`.
+
 ### Form strategy do produto
 
 Neste ecossistema, **form strategy** identifica a extensão de forms implementada
