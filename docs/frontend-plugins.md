@@ -119,6 +119,28 @@ contrato preferencial para inserir ou substituir fields.
 
 ## Plugins compartilháveis atuais
 
+### `plusoftcrm.libs.main.forms.dt`
+
+Quando esse form estiver injetado, `$(container).dt(options)` cria uma tabela
+com DataTables e integração server-side. O contrato mais útil para strategies
+é:
+
+- `ajax.url` aponta para o serviço de listagem;
+- `filters()` retorna os filtros atuais do form a cada busca;
+- `columns` declara as colunas de dados e seus títulos já traduzidos;
+- `actionButtons` acrescenta os botões da última coluna;
+- `enableSearchListener: false` permite que a strategy controle explicitamente
+  quando pesquisar;
+- `showEditButton`, `showRemoveButton`, `showFormCacheButton`,
+  `enableExportXlsx` e `enableExportCsv` desabilitam ações nativas que o fluxo
+  não utiliza.
+
+A instância retornada expõe `search()` e `refresh()`. Como `actionButtons`
+acrescenta uma coluna que não pertence aos dados, o backend deve validar a
+ordenação apenas contra as colunas declaradas no contrato do serviço. Em form
+strategies, a inicialização deve ser idempotente e os eventos dos botões de
+linha devem ser delegados e possuir namespace próprio.
+
 ### `oneMediaUploader`
 
 O uploader compartilhado não deve incorporar limites de um canal. Configure por instância:

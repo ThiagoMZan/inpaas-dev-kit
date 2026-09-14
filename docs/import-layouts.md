@@ -186,6 +186,46 @@ return {
 };
 ```
 
+### Persistência integralmente assumida pela strategy
+
+Na versão customizada estudada, antes de percorrer os campos do layout o
+importador expõe em `to.columns` o array posicional completo da linha. Isso
+permite que `onrecord` leia inclusive colunas configuradas com ação `G` e sem
+vínculo com `CAMPOBD`.
+
+O `onrecord` dessa versão recebe:
+
+```javascript
+onrecord(to, toUpdate, haveRecord, importto, lineNumber)
+```
+
+Depois do hook, o insert/update padrão somente acontece quando `to.ignore` é
+falso. Portanto, uma strategy pode assumir toda a persistência da linha:
+
+1. ler os valores originais em `to.columns`;
+2. validar e transformar os dados;
+3. localizar dinamicamente o registro com a chave exigida pelo negócio;
+4. executar o insert/update manualmente;
+5. atribuir `to.ignore = true` para impedir a segunda gravação;
+6. preencher em `to` a PK física esperada pelo importador, pois ela será usada
+   em `DATAIMP_IMPORTLOGRECORDKEY` mesmo quando a gravação padrão for ignorada.
+
+Para um layout dirigido integralmente pela strategy, as posições do CSV podem
+ser representadas por campos `G`, com coluna de destino nula. Ainda deve existir
+um `DATAIMP_LAYOUTFIELD` por posição para preservar a ordem e documentar o
+arquivo. Não marcar campos de análise nesse caso, pois a busca padrão acontece
+antes de `onrecord` e seria redundante ou divergente da decisão manual.
+
+O indicador `ignore` e `columns` são propriedades de controle; não incluir o
+próprio objeto `to` diretamente no payload manual de persistência. Montar um
+objeto separado somente com colunas reais da entidade. Após o upsert, copiar a
+PK resultante para a chave física de `to` usada pelo log.
+
+Esse mecanismo não faz rollback automático de efeitos externos à sessão usada
+pela strategy. Falhas devem ser lançadas pelo `onrecord` para que a linha seja
+registrada como erro, e o código manual deve evitar deixar uma gravação parcial
+antes de lançar a exceção.
+
 Antes de publicar um layout, avaliar se o mapeamento posicional e as conversões
 nativas do importador são suficientes. Solicitar uma estratégia quando houver,
 por exemplo:
