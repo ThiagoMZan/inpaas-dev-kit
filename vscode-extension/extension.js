@@ -161,7 +161,8 @@ async function selectWorkspaceFolder() {
 
   if (
     activeFolder &&
-    fs.existsSync(path.join(activeFolder.uri.fsPath, 'start-local.ps1'))
+    (fs.existsSync(path.join(activeFolder.uri.fsPath, 'start-local.js')) ||
+      fs.existsSync(path.join(activeFolder.uri.fsPath, 'start-local.ps1')))
   ) {
     return activeFolder;
   }
@@ -174,7 +175,8 @@ async function selectWorkspaceFolder() {
   }
 
   const localServerFolders = folders.filter(function (folder) {
-    return fs.existsSync(path.join(folder.uri.fsPath, 'start-local.ps1'));
+    return fs.existsSync(path.join(folder.uri.fsPath, 'start-local.js')) ||
+      fs.existsSync(path.join(folder.uri.fsPath, 'start-local.ps1'));
   });
 
   if (localServerFolders.length === 1) {

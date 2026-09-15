@@ -13,7 +13,8 @@ source/
 └── module.key.style.css
 ```
 
-- A chave lógica não possui extensão na plataforma nem no `require()` Nashorn.
+- A chave lógica deve ser preservada exatamente como cadastrada, inclusive quando termina em `.js`, `.css` ou `.html`. Esse sufixo pode fazer parte da chave.
+- O nome local é a chave completa acrescida de `.` e do tipo: chave `exemplo.router.js`, tipo `js`, resulta em `exemplo.router.js.js`. Não rejeitar nem remover o sufixo da chave no download.
 - A extensão local é determinada pelo campo `type`: `js`, `css` ou `html`.
 - Um `.js` pode ser Nashorn ou JavaScript de frontend; engine e tipo vêm do cadastro do Studio.
 - Download: `GET /api/vs-code/sources/{key}`.
@@ -21,7 +22,7 @@ source/
 - Publicação: `POST /api/vs-code/sources/publish` com o mesmo contrato.
 - Excluir um arquivo local nunca publica nem exclui o cadastro remoto.
 
-O `require()` Nashorn usa sempre a chave sem `.js`:
+O `require()` Nashorn usa a chave cadastrada, sem acrescentar a extensão do arquivo local:
 
 ```js
 var dependency = require('module.key.dependency');

@@ -360,10 +360,6 @@ async function downloadSource(response, requestUrl) {
 
     const returnedKey = safeResourceName(source.key);
 
-    if (['.js', '.css', '.html'].includes(path.extname(returnedKey).toLowerCase())) {
-      throw new Error('A chave do source deve ser retornada sem extensão.');
-    }
-
     const fileName = returnedKey + '.' + sourceType;
 
     const filePath = path.join(sourceDirectory, fileName);

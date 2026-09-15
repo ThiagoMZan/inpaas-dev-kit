@@ -2,7 +2,7 @@
   "name": "inpaas-source-tools",
   "displayName": "inPaaS Studio Tools",
   "description": "Integração local do VS Code com sources, forms e entities existentes na plataforma inPaaS.",
-  "version": "0.6.14",
+  "version": "0.6.15",
   "publisher": "inpaas-local",
   "engines": {
     "vscode": "^1.85.0"

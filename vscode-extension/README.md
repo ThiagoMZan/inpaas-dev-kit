@@ -133,7 +133,11 @@ Informe a chave lógica usada pela plataforma. A API retorna `key` sem extensão
 Ao salvar, o mesmo contrato é enviado para `/api/vs-code/sources/publish`:
 `key` sem extensão, `type` (`js`, `css` ou `html`) e `content`.
 
-O `start-local.ps1` do projeto precisa estar em execução. Ele chama o runtime compartilhado do `inpaas-dev-kit`; não é necessário manter `server.js` na raiz do projeto.
+Execute `node start-local.js` na pasta do projeto e mantenha o terminal aberto. Esse inicializador chama o runtime compartilhado do `inpaas-dev-kit` sem depender da política de execução de PowerShell. `start-local.ps1` permanece como alternativa legada.
+
+Confira o endereço exibido por `Dashboard disponível em ...`: ele deve coincidir com `inpaas.serverUrl` no VS Code (padrão `http://127.0.0.1:8080`). O runtime usa `PLATFORM_PORT` quando definida. Um processo Node ativo, sozinho, não confirma que o proxy está escutando nessa porta.
+
+Se um download não concluir, consulte **Output → inPaaS** para identificar a chave, o projeto escolhido e eventuais erros de conexão. A identificação de projetos aceita `start-local.js` e `start-local.ps1`.
 
 ## Download de forms
 
