@@ -1103,43 +1103,63 @@ function getCellValue(row, field, index) {
 
 class QueryResultPanel {
   constructor(context) {
-    this.panel = vscode.window.createWebviewPanel(
-      'inpaasQueryResults',
-      'inPaaS: Resultado da query',
-      vscode.ViewColumn.Beside,
-      { enableScripts: true, retainContextWhenHidden: true }
-    );
     this.context = context;
+    this.view = null;
+    this.pendingHtml = null;
     this.sql = '';
     this.workspaceFolder = null;
     this.page = 1;
     this.limit = 25;
 
-    this.panel.onDidDispose(function () {
-      queryResultPanel = null;
-    }, null, context.subscriptions);
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider(
+      'inpaasQueryResults',
+      this,
+      { webviewOptions: { retainContextWhenHidden: true } }
+    ));
+  }
 
-    this.panel.webview.onDidReceiveMessage(async function (message) {
+  resolveWebviewView(view) {
+    this.view = view;
+    view.webview.options = { enableScripts: true };
+    view.webview.onDidReceiveMessage(async function (message) {
       if (message.command === 'page') {
         await this.execute(Number(message.page), Number(message.limit));
       }
-    }.bind(this), null, context.subscriptions);
+    }.bind(this), null, this.context.subscriptions);
+    view.onDidDispose(function () {
+      this.view = null;
+      queryResultPanel = null;
+    }.bind(this), null, this.context.subscriptions);
+    if (this.pendingHtml !== null) {
+      view.webview.html = this.pendingHtml;
+      this.pendingHtml = null;
+    }
   }
 
   reveal() {
-    this.panel.reveal(vscode.ViewColumn.Beside, true);
+    if (this.view) {
+      this.view.show(true);
+    }
+  }
+
+  setHtml(html) {
+    if (this.view) {
+      this.view.webview.html = html;
+    } else {
+      this.pendingHtml = html;
+    }
   }
 
   showLoading() {
-    this.panel.webview.html = this.getHtml(null, null, true);
+    this.setHtml(this.getHtml(null, null, true));
   }
 
   showError(error) {
-    this.panel.webview.html = this.getHtml(null, error, false);
+    this.setHtml(this.getHtml(null, error, false));
   }
 
   showResult(result) {
-    this.panel.webview.html = this.getHtml(result, null, false);
+    this.setHtml(this.getHtml(result, null, false));
   }
 
   async execute(page, limit) {
@@ -1264,9 +1284,9 @@ async function executeQuery(context) {
 
   if (!queryResultPanel) {
     queryResultPanel = new QueryResultPanel(context);
-  } else {
-    queryResultPanel.reveal();
   }
+
+  queryResultPanel.reveal();
 
   queryResultPanel.workspaceFolder = workspaceFolder;
   queryResultPanel.sql = sql;

@@ -217,9 +217,9 @@ usando o editor nativo do VS Code.
 - `Shift+Alt+F`: aplica a formatação SQL básica.
 - `inPaaS: Executar query`: alternativa pela paleta de comandos.
 
-Os resultados são exibidos em um painel com scroll horizontal, total de
-registros, tempo de execução, seleção de 10/25/50/100 registros e paginação no
-servidor.
+Os resultados são exibidos no painel inferior do VS Code, com scroll horizontal,
+total de registros, tempo de execução, seleção de 10/25/50/100 registros e
+paginação no servidor.
 
 ## Autocomplete SQL
 

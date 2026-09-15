@@ -98,6 +98,16 @@
         }
       ]
     },
+    "views": {
+      "panel": [
+        {
+          "type": "webview",
+          "id": "inpaasQueryResults",
+          "name": "Resultado da query",
+          "visibility": "hidden"
+        }
+      ]
+    },
     "keybindings": [
       {
         "command": "inpaas.executeQuery",
