@@ -166,6 +166,13 @@ async function selectWorkspaceFolder() {
     return activeFolder;
   }
 
+  // Queries criadas pelo comando "Nova query" são documentos Untitled e não
+  // pertencem a uma pasta do workspace. Nesse caso, use o primeiro projeto do
+  // arquivo .code-workspace, que é o projeto principal da sessão.
+  if (activeEditor && activeEditor.document.isUntitled) {
+    return folders[0];
+  }
+
   const localServerFolders = folders.filter(function (folder) {
     return fs.existsSync(path.join(folder.uri.fsPath, 'start-local.ps1'));
   });
@@ -1284,10 +1291,14 @@ async function executeQuery(context) {
     throw new Error('A query está vazia.');
   }
 
-  const workspaceFolder = await selectWorkspaceFolder();
+  // A query pode ser salva fora das pastas abertas no workspace. A execução
+  // usa o projeto do arquivo quando ele pertence ao workspace; caso contrário,
+  // usa o primeiro projeto, que é a raiz principal da sessão.
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri) ||
+    (vscode.workspace.workspaceFolders || [])[0];
 
   if (!workspaceFolder) {
-    return;
+    throw new Error('Abra a pasta do projeto antes de executar a query.');
   }
 
   if (!queryResultPanel) {
