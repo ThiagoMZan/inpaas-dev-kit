@@ -245,8 +245,11 @@ Os metadados são carregados uma vez por sessão. Execute
 - `inpaas.sourceDirectory`: padrão `source`.
 - `inpaas.databaseQueryPath`: padrão `/api/studio/dbexplorer/v2/run`.
 - `inpaas.databaseMetadataPath`: padrão
-  `/eai/services/DatabaseExplorerUtils/getTablesHint`.
+  `/api/eai-services/DatabaseExplorerUtils/getTablesHint`.
 
 O servidor usa `SOURCE_AUTO_PUBLISH` e `FORM_AUTO_PUBLISH` para habilitar os
 watchers. Os endpoints remotos de publicação são configurados por
 `SOURCE_PUBLISH_PATH` e `FORM_PUBLISH_PATH`.
+
+## 0.6.12 — Resultado abaixo do SQL
+O resultado abre no grupo abaixo do SQL usando moveEditorToBelowGroup. Execuções seguintes reutilizam o grupo do resultado e o foco retorna ao SQL.

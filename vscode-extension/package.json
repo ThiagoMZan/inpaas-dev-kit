@@ -2,7 +2,7 @@
   "name": "inpaas-source-tools",
   "displayName": "inPaaS Studio Tools",
   "description": "Integração local do VS Code com sources, forms e entities existentes na plataforma inPaaS.",
-  "version": "0.6.9",
+  "version": "0.6.12",
   "publisher": "inpaas-local",
   "engines": {
     "vscode": "^1.85.0"
@@ -98,16 +98,6 @@
         }
       ]
     },
-    "views": {
-      "panel": [
-        {
-          "type": "webview",
-          "id": "inpaasQueryResults",
-          "name": "Resultado da query",
-          "visibility": "hidden"
-        }
-      ]
-    },
     "keybindings": [
       {
         "command": "inpaas.executeQuery",
@@ -171,7 +161,7 @@
         },
         "inpaas.databaseMetadataPath": {
           "type": "string",
-          "default": "/eai/services/DatabaseExplorerUtils/getTablesHint",
+          "default": "/api/eai-services/DatabaseExplorerUtils/getTablesHint",
           "description": "Endpoint usado para carregar tabelas e colunas do autocomplete SQL."
         }
       }
