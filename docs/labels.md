@@ -56,6 +56,14 @@ Labels de campos devem ser associadas ao módulo indicado pelo usuário. Não
 inferir o módulo quando ele não estiver inequívoco; solicitar o módulo ou um
 exemplo existente.
 
+## Contexto de módulo no VS Code
+
+Nos fluxos de labels executados pela extensão inPaaS, é obrigatório haver um
+módulo ativo selecionado na Activity Bar. Usar o campo `id` dessa seleção como
+`moduleId` em todas as rotas e payloads de labels; não usar a chave textual ou
+o título do módulo como substituto. Se não houver módulo selecionado, a ação
+deve ser bloqueada e orientar o usuário a selecioná-lo antes de continuar.
+
 ## Idiomas
 
 Consultar os idiomas do ambiente antes de montar traduções:
@@ -161,7 +169,9 @@ Na remoção, o DAO exclui primeiro apenas a associação com o módulo. A linha
 
 ## Cuidados de automação
 
-- Consultar ou receber explicitamente o módulo antes da gravação.
+- No VS Code, exigir módulo ativo selecionado e usar seu `id` como `moduleId`;
+  fora desse fluxo, consultar ou receber explicitamente o módulo antes da
+  gravação.
 - Consultar os idiomas disponíveis em vez de fixar locales globalmente.
 - Gerar chaves em minúsculas e respeitar a convenção específica de campos.
 - Não substituir traduções existentes sem antes lê-las ou usar a rota em lote

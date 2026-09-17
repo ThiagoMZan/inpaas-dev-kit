@@ -326,6 +326,10 @@ registrado em `/forms` e `/forms/*`.
 
 ### Fichas somente leitura com pattern
 
+Para o contrato completo de arquitetura, apresentação, proporções, labels,
+pattern e validação dessas fichas, leia
+[`read-only-detail-forms.md`](read-only-detail-forms.md).
+
 Um form HTML usado como ficha pode manter `<fields/>` vazio e montar seus dados
 no `beforeRender` do `DynaFormBusinessDelegate`. O registro selecionado costuma
 chegar no `TO data` pela PK física em minúsculas; quando a entity também define

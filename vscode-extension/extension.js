@@ -7,7 +7,32 @@ const vscode = require('vscode');
 const pendingDownloads = new Map();
 const metadataCache = new Map();
 let queryResultPanel = null;
+let studioPanel = null;
 let outputChannel = null;
+let moduleContextProvider = null;
+let formsProvider = null;
+let sourcesProvider = null;
+let entitiesProvider = null;
+let databaseProvider = null;
+let studioProvider = null;
+
+const MODULE_SELECTION_STATE_KEY = 'inpaas.selectedModules';
+const SOURCE_TYPES = [
+  { id: 11, title: 'Application Context Listener' },
+  { id: 9, title: 'Authorization Handler' },
+  { id: 2, title: 'Business Delegate' },
+  { id: 6, title: 'Communicator' },
+  { id: 10, title: 'Custom Packer/Deployer' },
+  { id: 5, title: 'Entity Data Validator' },
+  { id: 7, title: 'File Storage Service' },
+  { id: 3, title: 'Form Business Delegate' },
+  { id: 8, title: 'Mailing' },
+  { id: 1, title: 'REST Service' },
+  { id: 4, title: 'Scheduler Task' },
+  { id: 14, title: 'Static CSS' },
+  { id: 12, title: 'Static HTML Page' },
+  { id: 13, title: 'Static JS' }
+];
 
 function writeOutput(level, message, error) {
   if (!outputChannel) {
@@ -199,6 +224,245 @@ async function selectWorkspaceFolder() {
 
 function getWorkspaceConfiguration(workspaceFolder) {
   return vscode.workspace.getConfiguration('inpaas', workspaceFolder.uri);
+}
+
+function getWorkspaceFolderForView() {
+  const folders = vscode.workspace.workspaceFolders || [];
+
+  if (folders.length === 0) return null;
+  if (folders.length === 1) return folders[0];
+
+  const activeEditor = vscode.window.activeTextEditor;
+  const activeFolder = activeEditor
+    ? vscode.workspace.getWorkspaceFolder(activeEditor.document.uri)
+    : null;
+
+  if (activeFolder) return activeFolder;
+
+  const localServerFolders = folders.filter(function (folder) {
+    return fs.existsSync(path.join(folder.uri.fsPath, 'start-local.js')) ||
+      fs.existsSync(path.join(folder.uri.fsPath, 'start-local.ps1'));
+  });
+
+  return localServerFolders.length === 1 ? localServerFolders[0] : folders[0];
+}
+
+function getModuleSelections(context) {
+  return context.workspaceState.get(MODULE_SELECTION_STATE_KEY, {});
+}
+
+function getModuleSelectionKey(workspaceFolder) {
+  const serverUrl = String(
+    getWorkspaceConfiguration(workspaceFolder).get('serverUrl') || ''
+  ).trim();
+
+  return workspaceFolder.uri.toString() + '|' + serverUrl;
+}
+
+function getSelectedModule(context, workspaceFolder) {
+  if (!workspaceFolder) return null;
+
+  const selections = getModuleSelections(context);
+  return selections[getModuleSelectionKey(workspaceFolder)] || null;
+}
+
+async function setSelectedModule(context, workspaceFolder, module) {
+  const selections = getModuleSelections(context);
+  selections[getModuleSelectionKey(workspaceFolder)] = module;
+  await context.workspaceState.update(MODULE_SELECTION_STATE_KEY, selections);
+
+  if (moduleContextProvider) moduleContextProvider.refresh();
+  if (formsProvider) formsProvider.refresh();
+  if (sourcesProvider) sourcesProvider.refresh();
+}
+
+async function listStudioModules(workspaceFolder) {
+  const configuration = getWorkspaceConfiguration(workspaceFolder);
+  const serverUrl = String(configuration.get('serverUrl') || '').trim();
+
+  if (!serverUrl) {
+    throw new Error('Configure inpaas.serverUrl antes de selecionar um módulo.');
+  }
+
+  const url = new URL('/api/studio/apps', serverUrl);
+  const apps = await requestJson(url);
+  const modules = [];
+
+  (Array.isArray(apps) ? apps : []).forEach(function (app) {
+    (Array.isArray(app.modules) ? app.modules : []).forEach(function (module) {
+      if (!module || module.id === undefined || !module.key) return;
+
+      modules.push({
+        id: module.id,
+        key: module.key,
+        title: module.title || module.key,
+        appTitle: app.title || app.key || 'Aplicação'
+      });
+    });
+  });
+
+  return modules;
+}
+
+async function selectModule(context) {
+  const workspaceFolder = await selectWorkspaceFolder();
+
+  if (!workspaceFolder) return;
+
+  const modules = await vscode.window.withProgress({
+    location: vscode.ProgressLocation.Notification,
+    title: 'inPaaS: carregando módulos',
+    cancellable: false
+  }, function () {
+    return listStudioModules(workspaceFolder);
+  });
+
+  if (modules.length === 0) {
+    throw new Error('Nenhum módulo disponível foi retornado pelo Studio.');
+  }
+
+  const selected = getSelectedModule(context, workspaceFolder);
+  const choice = await vscode.window.showQuickPick(
+    modules.map(function (module) {
+      return {
+        label: module.title,
+        description: module.appTitle,
+        detail: module.key + (selected && selected.id === module.id ? ' — selecionado' : ''),
+        module: module
+      };
+    }),
+    {
+      placeHolder: 'Selecione o módulo ativo para ' + workspaceFolder.name,
+      matchOnDescription: true,
+      matchOnDetail: true
+    }
+  );
+
+  if (!choice) return;
+
+  await setSelectedModule(context, workspaceFolder, choice.module);
+  vscode.window.showInformationMessage(
+    'inPaaS: módulo ativo definido como ' + choice.module.title + '.'
+  );
+}
+
+function ModuleContextProvider(context) {
+  this.context = context;
+  this.changeEmitter = new vscode.EventEmitter();
+  this.onDidChangeTreeData = this.changeEmitter.event;
+}
+
+ModuleContextProvider.prototype.refresh = function () {
+  const workspaceFolder = getWorkspaceFolderForView();
+  const selected = getSelectedModule(this.context, workspaceFolder);
+
+  if (this.treeView) {
+    this.treeView.title = selected ? 'Module: ' + selected.title : 'Module';
+  }
+  this.changeEmitter.fire();
+};
+
+ModuleContextProvider.prototype.getTreeItem = function (item) {
+  return item;
+};
+
+ModuleContextProvider.prototype.getChildren = function () {
+  const workspaceFolder = getWorkspaceFolderForView();
+
+  if (!workspaceFolder) {
+    const item = new vscode.TreeItem('Abra um projeto inPaaS', vscode.TreeItemCollapsibleState.None);
+    item.description = 'Nenhuma pasta no workspace';
+    item.iconPath = new vscode.ThemeIcon('folder-opened');
+    return [item];
+  }
+
+  return [createTreeAction('Select', 'plug', 'inpaas.selectModule')];
+};
+
+function FormsProvider() {
+  this.changeEmitter = new vscode.EventEmitter();
+  this.onDidChangeTreeData = this.changeEmitter.event;
+}
+
+function SourcesProvider() {
+  this.changeEmitter = new vscode.EventEmitter();
+  this.onDidChangeTreeData = this.changeEmitter.event;
+}
+
+SourcesProvider.prototype.refresh = function () {
+  this.changeEmitter.fire();
+};
+
+FormsProvider.prototype.refresh = function () {
+  this.changeEmitter.fire();
+};
+
+function StudioProvider() {
+  this.changeEmitter = new vscode.EventEmitter();
+  this.onDidChangeTreeData = this.changeEmitter.event;
+}
+
+function DatabaseProvider() {
+  this.changeEmitter = new vscode.EventEmitter();
+  this.onDidChangeTreeData = this.changeEmitter.event;
+}
+
+function EntitiesProvider() {
+  this.changeEmitter = new vscode.EventEmitter();
+  this.onDidChangeTreeData = this.changeEmitter.event;
+}
+
+EntitiesProvider.prototype.getTreeItem = function (item) {
+  return item;
+};
+
+EntitiesProvider.prototype.getChildren = function () {
+  return [createTreeAction('Download', 'cloud-download', 'inpaas.downloadEntity')];
+};
+
+DatabaseProvider.prototype.getTreeItem = function (item) {
+  return item;
+};
+
+DatabaseProvider.prototype.getChildren = function () {
+  return [createTreeAction('New Query', 'new-file', 'inpaas.newQuery')];
+};
+
+StudioProvider.prototype.getTreeItem = function (item) {
+  return item;
+};
+
+StudioProvider.prototype.getChildren = function () {
+  return [createTreeAction('Open', 'window', 'inpaas.openStudio')];
+};
+
+FormsProvider.prototype.getTreeItem = function (item) {
+  return item;
+};
+
+FormsProvider.prototype.getChildren = function () {
+  return [
+    createTreeAction('New', 'new-file', 'inpaas.createForm'),
+    createTreeAction('Download', 'cloud-download', 'inpaas.downloadForm')
+  ];
+};
+
+SourcesProvider.prototype.getTreeItem = function (item) {
+  return item;
+};
+
+SourcesProvider.prototype.getChildren = function () {
+  return [
+    createTreeAction('New', 'new-file', 'inpaas.createSource'),
+    createTreeAction('Download', 'cloud-download', 'inpaas.downloadSource')
+  ];
+};
+
+function createTreeAction(label, icon, command) {
+  const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+  item.iconPath = new vscode.ThemeIcon(icon);
+  item.command = { command: command, title: label };
+  return item;
 }
 
 function createLocalUrl(workspaceFolder, configurationKey) {
@@ -888,9 +1152,7 @@ async function downloadSource() {
   }, function () {
     return downloadSourceForWorkspace(workspaceFolder, key.trim());
   });
-  const document = await vscode.workspace.openTextDocument(downloaded.filePath);
-
-  await vscode.window.showTextDocument(document, { preview: false });
+  await openDownloadedSource(downloaded);
   vscode.window.showInformationMessage(
     'inPaaS: source ' + (downloaded.result.key || key.trim()) + ' baixado.'
   );
@@ -898,6 +1160,133 @@ async function downloadSource() {
     'INFO',
     'Source "' + (downloaded.result.key || key.trim()) +
     '" salvo em ' + downloaded.filePath
+  );
+}
+
+async function openDownloadedSource(downloaded) {
+  const document = await vscode.workspace.openTextDocument(downloaded.filePath);
+  await vscode.window.showTextDocument(document, { preview: false });
+}
+
+function getSuggestedSourceName(key, prefix, type) {
+  const suffix = key.indexOf(prefix) === 0
+    ? key.slice(prefix.length)
+    : key;
+
+  if (type === 1) {
+    return suffix.slice(suffix.lastIndexOf('.') + 1);
+  }
+
+  return suffix.replace(/(?:^\w|[A-Z]|\b\w)/g, function (letter) {
+    return letter.toUpperCase();
+  }).replace(/\.+/g, '');
+}
+
+async function createSource(context) {
+  const workspaceFolder = await selectWorkspaceFolder();
+
+  if (!workspaceFolder) return;
+
+  const module = getSelectedModule(context, workspaceFolder);
+
+  if (!module) {
+    throw new Error(
+      'Selecione o módulo ativo na barra lateral do inPaaS antes de criar um source.'
+    );
+  }
+
+  const selectedType = await vscode.window.showQuickPick(
+    SOURCE_TYPES.map(function (sourceType) {
+      return {
+        label: sourceType.title,
+        description: String(sourceType.id),
+        sourceType: sourceType
+      };
+    }),
+    {
+      title: 'inPaaS: Novo Source',
+      placeHolder: 'Selecione o tipo do source',
+      matchOnDescription: true
+    }
+  );
+
+  if (!selectedType) return;
+
+  const prefix = module.key + '.';
+  const key = await vscode.window.showInputBox({
+    title: 'inPaaS: Novo Source',
+    prompt: 'Informe a chave do source',
+    value: prefix,
+    ignoreFocusOut: true,
+    validateInput: function (value) {
+      const normalized = value.trim();
+
+      if (!normalized) return 'A chave do source é obrigatória.';
+      if (normalized === prefix) return 'Informe o segmento final da chave.';
+      if (normalized.indexOf(prefix) !== 0) {
+        return 'A chave deve começar com "' + prefix + '".';
+      }
+      if (/\s/.test(normalized)) return 'A chave não pode conter espaços.';
+
+      return null;
+    }
+  });
+
+  if (key === undefined) return;
+
+  const normalizedKey = key.trim();
+  const name = await vscode.window.showInputBox({
+    title: 'inPaaS: Novo Source',
+    prompt: 'Informe o nome exibido do source',
+    value: getSuggestedSourceName(
+      normalizedKey,
+      prefix,
+      selectedType.sourceType.id
+    ),
+    ignoreFocusOut: true,
+    validateInput: function (value) {
+      return value.trim() ? null : 'O nome do source é obrigatório.';
+    }
+  });
+
+  if (name === undefined) return;
+
+  const configuration = getWorkspaceConfiguration(workspaceFolder);
+  const endpoint = new URL(
+    '/api/studio/sources',
+    String(configuration.get('serverUrl') || '').trim()
+  );
+  const payload = {
+    type: selectedType.sourceType.id,
+    key: normalizedKey,
+    name: name.trim(),
+    module: module.id
+  };
+
+  const created = await vscode.window.withProgress({
+    location: vscode.ProgressLocation.Notification,
+    title: 'inPaaS: criando source ' + normalizedKey,
+    cancellable: false
+  }, async function () {
+    const result = await requestJson(endpoint, {
+      method: 'POST',
+      body: payload
+    });
+
+    if (result && result.error) {
+      throw new Error(result.message || result.error);
+    }
+
+    return downloadSourceForWorkspace(workspaceFolder, normalizedKey);
+  });
+
+  await openDownloadedSource(created);
+  writeOutput(
+    'INFO',
+    'Source criado no módulo "' + module.key + '": ' + normalizedKey
+  );
+  vscode.window.showInformationMessage(
+    'inPaaS: source ' + normalizedKey + ' criado e baixado.'
   );
 }
 
@@ -926,14 +1315,7 @@ async function downloadForm() {
     return downloadFormForWorkspace(workspaceFolder, key.trim());
   });
 
-  for (let index = 0; index < downloaded.files.length; index++) {
-    const file = downloaded.files[index];
-    const document = await vscode.workspace.openTextDocument(file.filePath);
-    await vscode.window.showTextDocument(document, {
-      preview: index !== 0,
-      preserveFocus: index !== 0
-    });
-  }
+  await openDownloadedForm(downloaded);
 
   writeOutput(
     'INFO',
@@ -943,6 +1325,114 @@ async function downloadForm() {
   vscode.window.showInformationMessage(
     'inPaaS: form ' + downloaded.result.key + ' baixado (' +
     downloaded.files.length + ' arquivo(s)).'
+  );
+}
+
+async function openDownloadedForm(downloaded) {
+  for (let index = 0; index < downloaded.files.length; index++) {
+    const file = downloaded.files[index];
+    const document = await vscode.workspace.openTextDocument(file.filePath);
+    await vscode.window.showTextDocument(document, {
+      preview: index !== 0,
+      preserveFocus: index !== 0
+    });
+  }
+}
+
+function getSuggestedV1FormName(key, prefix) {
+  const suffix = key.indexOf(prefix) === 0
+    ? key.slice(prefix.length)
+    : key;
+  const lastSeparator = suffix.lastIndexOf('.');
+
+  return suffix.slice(lastSeparator + 1);
+}
+
+async function createForm(context) {
+  const workspaceFolder = await selectWorkspaceFolder();
+
+  if (!workspaceFolder) return;
+
+  const module = getSelectedModule(context, workspaceFolder);
+
+  if (!module) {
+    throw new Error(
+      'Selecione o módulo ativo na barra lateral do inPaaS antes de criar um form.'
+    );
+  }
+
+  const prefix = module.key + '.forms.';
+  const key = await vscode.window.showInputBox({
+    title: 'inPaaS: Novo Form v1',
+    prompt: 'Informe a chave do form',
+    value: prefix,
+    ignoreFocusOut: true,
+    validateInput: function (value) {
+      const normalized = value.trim();
+
+      if (!normalized) return 'A chave do form é obrigatória.';
+      if (normalized === prefix) return 'Informe o segmento final da chave.';
+      if (normalized.indexOf(prefix) !== 0) {
+        return 'A chave deve começar com "' + prefix + '".';
+      }
+      if (/\s/.test(normalized)) return 'A chave não pode conter espaços.';
+
+      return null;
+    }
+  });
+
+  if (key === undefined) return;
+
+  const normalizedKey = key.trim();
+  const name = await vscode.window.showInputBox({
+    title: 'inPaaS: Novo Form v1',
+    prompt: 'Informe o nome exibido do form',
+    value: getSuggestedV1FormName(normalizedKey, prefix),
+    ignoreFocusOut: true,
+    validateInput: function (value) {
+      return value.trim() ? null : 'O nome do form é obrigatório.';
+    }
+  });
+
+  if (name === undefined) return;
+
+  const configuration = getWorkspaceConfiguration(workspaceFolder);
+  const serverUrl = String(configuration.get('serverUrl') || '').trim();
+  const endpoint = new URL(
+    '/api/studio/modules/' + encodeURIComponent(String(module.id)) + '/forms',
+    serverUrl
+  );
+  const payload = {
+    key: normalizedKey,
+    name: name.trim(),
+    module: module.id,
+    type: 'v1'
+  };
+
+  const created = await vscode.window.withProgress({
+    location: vscode.ProgressLocation.Notification,
+    title: 'inPaaS: criando form ' + normalizedKey,
+    cancellable: false
+  }, async function () {
+    const result = await requestJson(endpoint, {
+      method: 'POST',
+      body: payload
+    });
+
+    if (result && result.error) {
+      throw new Error(result.message || result.error);
+    }
+
+    return downloadFormForWorkspace(workspaceFolder, normalizedKey);
+  });
+
+  await openDownloadedForm(created);
+  writeOutput(
+    'INFO',
+    'Form v1 criado no módulo "' + module.key + '": ' + normalizedKey
+  );
+  vscode.window.showInformationMessage(
+    'inPaaS: form ' + normalizedKey + ' criado e baixado.'
   );
 }
 
@@ -1071,6 +1561,60 @@ function createNonce() {
   }
 
   return nonce;
+}
+
+async function openStudio(context) {
+  const workspaceFolder = await selectWorkspaceFolder();
+
+  if (!workspaceFolder) {
+    return;
+  }
+
+  if (studioPanel) {
+    studioPanel.reveal(studioPanel.viewColumn, false);
+    return;
+  }
+
+  const configuration = getWorkspaceConfiguration(workspaceFolder);
+  const serverUrl = String(configuration.get('serverUrl') || '').trim();
+  const studioPath = String(
+    configuration.get('studioPath') ||
+    '/forms/inpaas.devstudio.forms.studio/'
+  ).trim();
+
+  if (!serverUrl) {
+    throw new Error('Configure inpaas.serverUrl antes de abrir o Studio.');
+  }
+
+  const studioUrl = new URL(studioPath, serverUrl);
+  const selectedModule = getSelectedModule(context, workspaceFolder);
+
+  if (selectedModule && selectedModule.id !== undefined) {
+    studioUrl.searchParams.set('inpaas-module-id', String(selectedModule.id));
+  }
+
+  const frameOrigin = studioUrl.origin;
+
+  studioPanel = vscode.window.createWebviewPanel(
+    'inpaasStudio',
+    'inPaaS Studio',
+    vscode.ViewColumn.Active,
+    { enableScripts: true, retainContextWhenHidden: true }
+  );
+
+  studioPanel.webview.html = '<!DOCTYPE html>' +
+    '<html lang="pt-BR"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+    '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; ' +
+    'frame-src ' + escapeHtml(frameOrigin) + '; style-src \'unsafe-inline\';">' +
+    '<style>html,body,iframe{width:100%;height:100%;margin:0;padding:0;border:0;' +
+    'overflow:hidden;background:var(--vscode-editor-background);}</style>' +
+    '</head><body><iframe title="inPaaS Studio" src="' +
+    escapeHtml(studioUrl.toString()) + '"></iframe></body></html>';
+
+  studioPanel.onDidDispose(function () {
+    studioPanel = null;
+  }, null, context.subscriptions);
 }
 
 function normalizeQueryResult(result, page, limit) {
@@ -1623,6 +2167,40 @@ function activate(context) {
   outputChannel = vscode.window.createOutputChannel('inPaaS');
   context.subscriptions.push(outputChannel);
 
+  moduleContextProvider = new ModuleContextProvider(context);
+  formsProvider = new FormsProvider();
+  sourcesProvider = new SourcesProvider();
+  entitiesProvider = new EntitiesProvider();
+  databaseProvider = new DatabaseProvider();
+  studioProvider = new StudioProvider();
+  moduleContextProvider.treeView = vscode.window.createTreeView(
+    'inpaas.moduleContext',
+    { treeDataProvider: moduleContextProvider }
+  );
+  moduleContextProvider.refresh();
+  context.subscriptions.push(
+    moduleContextProvider.treeView,
+    moduleContextProvider.changeEmitter,
+    vscode.window.registerTreeDataProvider('inpaas.forms', formsProvider),
+    formsProvider.changeEmitter,
+    vscode.window.registerTreeDataProvider('inpaas.sources', sourcesProvider),
+    sourcesProvider.changeEmitter,
+    vscode.window.registerTreeDataProvider('inpaas.entities', entitiesProvider),
+    entitiesProvider.changeEmitter,
+    vscode.window.registerTreeDataProvider('inpaas.database', databaseProvider),
+    databaseProvider.changeEmitter,
+    vscode.window.registerTreeDataProvider('inpaas.studio', studioProvider),
+    studioProvider.changeEmitter,
+    vscode.window.onDidChangeActiveTextEditor(function () {
+      moduleContextProvider.refresh();
+    }),
+    vscode.workspace.onDidChangeConfiguration(function (event) {
+      if (event.affectsConfiguration('inpaas.serverUrl')) {
+        moduleContextProvider.refresh();
+      }
+    })
+  );
+
   const disposables = [
     registerCommand(context, 'inpaas.downloadSource', downloadSource),
     registerCommand(context, 'inpaas.downloadForm', downloadForm),
@@ -1636,6 +2214,18 @@ function activate(context) {
     }),
     registerCommand(context, 'inpaas.formatSql', formatSqlDocument),
     registerCommand(context, 'inpaas.refreshDatabaseMetadata', refreshDatabaseMetadata),
+    registerCommand(context, 'inpaas.openStudio', function () {
+      return openStudio(context);
+    }),
+    registerCommand(context, 'inpaas.selectModule', function () {
+      return selectModule(context);
+    }),
+    registerCommand(context, 'inpaas.createForm', function () {
+      return createForm(context);
+    }),
+    registerCommand(context, 'inpaas.createSource', function () {
+      return createSource(context);
+    }),
     vscode.commands.registerCommand('inpaas.openIncludedForm', async function (args) {
       try {
         return await openIncludedForm(args);

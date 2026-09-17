@@ -170,13 +170,15 @@ O runtime é compartilhado em `inpaas-dev-kit/runtime/`. Cada projeto mantém so
 
 Alterações de proxy, download, publicação e resolução local devem ser feitas exclusivamente no runtime do kit para valerem em todos os projetos. O servidor local:
 
-- encaminha `/api`, `/eai`, `/static` e demais endpoints configurados para o ambiente remoto;
+- encaminha `/api`, `/api-controller`, `/forms`, `/eai`, `/static`, `/web` e demais endpoints configurados para o ambiente remoto;
 - remove expressões Mustache `{{ ... }}` da query string encaminhada e descarta o parâmetro quando o valor ficar vazio;
 - adiciona Basic Auth somente no desenvolvimento local;
 - mantém o corpo e o `Content-Type` de uploads multipart;
 - observa `source/` e `forms/` quando a publicação automática está habilitada;
-- resolve `/includes/{form-key}/{js|css|html}/{nome-base}.{tipo}` para o fragmento local correspondente e ignora a query string de versionamento;
-- resolve `/forms/{form-key}` para `forms/{form-key}/{nome-base}.html`, permitindo abrir diretamente no navegador um form HTML já baixado;
+- resolve `/includes/{form-key}/{js|css|html}/{nome-base}.{tipo}` para o fragmento local correspondente, ignora a query string de versionamento e usa o ambiente remoto como fallback quando o fragmento não existe localmente;
+- reserva `/forms/{form-key}` para o ambiente remoto, inclusive para iframes do Studio;
+- resolve `/local-forms/{form-key}` para `forms/{form-key}/{nome-base}.html`, permitindo abrir diretamente no navegador um form HTML já baixado;
+- encaminha `/forms/inpaas.devstudio.forms.studio/` ao ambiente remoto com a autenticação local e permite sua exibição na aba Webview da extensão;
 - ignora a escrita causada por downloads para não publicar imediatamente;
 - compara o conteúdo observado com a versão conhecida e só publica sources e forms quando os bytes realmente mudam; leituras, refresh do navegador e eventos espúrios do `fs.watch` não publicam;
 - não publica eventos de exclusão.
@@ -214,9 +216,119 @@ Ela pode ser consultada para entender classes, queries, entidades e comportament
 A extensão compartilhada oferece:
 
 - download de source, form e entity pela paleta;
+- container `inPaaS` na Activity Bar, com seleção persistente do módulo ativo
+  por projeto e ambiente. A lista vem de `GET /api/studio/apps` pelo proxy local; os
+  fluxos dependentes de módulo devem reutilizar esse contexto, em vez de pedir
+  o módulo novamente;
+- criação de Form v1 pelo comando `inPaaS: Novo Form v1`. O comando exige
+  módulo ativo, sugere a chave `{module.key}.forms.`, solicita o nome e chama
+  `POST /api/studio/modules/{moduleId}/forms` com o `id` selecionado antes de
+  baixar os fragmentos para edição local;
+- criação de Source pelo comando `inPaaS: Novo Source`, na view `Sources`.
+  O comando exige módulo ativo, seleciona o tipo, sugere a chave
+  `{module.key}.` e o nome conforme o template do Studio — último segmento
+  para REST Service; PascalCase sem pontos para os demais tipos — antes de
+  chamar `POST /api/studio/sources` com `module` igual ao `id` selecionado e
+  baixar o source para edição local;
 - navegação por `require()` com download sob demanda;
 - publicação automática coordenada pelo servidor local;
 - editor e executor SQL paginado;
 - autocomplete de tabelas e colunas.
+- view `Entity`, exibida após `Sources`, com a ação `Download`, que reutiliza o download de entity existente;
+- view `Database`, exibida após `Entity`, com a ação `New Query`, que reutiliza o editor SQL existente;
+- view `Studio`, exibida após `Database`, com a ação `Open` que abre o form do Studio pela URL do proxy local configurada no workspace.
+
+### Contrato operacional para criar resources pelo agente
+
+Este é o contrato autossuficiente para automação. Não deduzir módulo, tipo,
+nome, rota ou versão do form a partir do arquivo em foco, do histórico da
+conversa ou de valores de `localStorage` do Studio.
+
+1. Determinar o projeto do workspace e a URL do proxy local (`inpaas.serverUrl`).
+2. Obter o módulo ativo daquele projeto e ambiente por `GET /api/studio/apps`.
+   A seleção válida contém, no mínimo, `id`, `key` e `title`. Se não houver uma
+   seleção explícita e válida, parar e solicitar que o módulo seja selecionado;
+   nunca inferir o módulo pela chave desejada.
+3. Usar sempre o `id` numérico/identificador retornado na seleção para os
+   campos e rotas que recebem módulo. A `key` serve exclusivamente para sugerir
+   e validar prefixos de chave; o título não é identificador técnico.
+4. Depois de um `POST` bem-sucedido, baixar o recurso recém-criado pela sua
+   chave e abri-lo localmente. Uma resposta com `error` deve encerrar o fluxo e
+   exibir `message` (ou `error`); não tentar criar, publicar ou baixar um
+   recurso alternativo.
+
+#### Novo Form
+
+- Escopo: apenas Form **v1**. Não criar nem oferecer `form-v2` neste fluxo.
+- Chave: iniciar em `{module.key}.forms.`; ela é obrigatória, deve ter ao menos
+  um segmento após esse prefixo e não pode conter espaços.
+- Nome: obrigatório e editável; a sugestão é o último segmento da chave após
+  `{module.key}.forms.`.
+- Criar com `POST /api/studio/modules/{module.id}/forms`, `Content-Type:
+  application/json`, e exatamente este payload:
+
+```json
+{
+  "key": "{chave-validada}",
+  "name": "{nome-validado}",
+  "module": {module.id},
+  "type": "v1"
+}
+```
+
+- Após criar, usar o download normal de form com a mesma chave e abrir todos os
+  fragmentos retornados localmente.
+
+#### Novo Source
+
+- Chave: iniciar em `{module.key}.`; ela é obrigatória, deve ter ao menos um
+  segmento após esse prefixo e não pode conter espaços.
+- Nome: obrigatório e editável. Para tipo `1` (REST Service), sugerir o último
+  segmento da chave após o prefixo. Para os outros tipos, converter os
+  segmentos após o prefixo em PascalCase e remover os pontos.
+- O tipo é obrigatório e deve ser um dos valores abaixo; não inventar IDs:
+
+| ID | Tipo |
+| --- | --- |
+| 1 | REST Service |
+| 2 | Business Delegate |
+| 3 | Form Business Delegate |
+| 4 | Scheduler Task |
+| 5 | Entity Data Validator |
+| 6 | Communicator |
+| 7 | File Storage Service |
+| 8 | Mailing |
+| 9 | Authorization Handler |
+| 10 | Custom Packer/Deployer |
+| 11 | Application Context Listener |
+| 12 | Static HTML Page |
+| 13 | Static JS |
+| 14 | Static CSS |
+
+- Criar com `POST /api/studio/sources`, `Content-Type: application/json`, e
+  exatamente este payload:
+
+```json
+{
+  "type": {id-do-tipo},
+  "key": "{chave-validada}",
+  "name": "{nome-validado}",
+  "module": {module.id}
+}
+```
+
+- Após criar, usar o download normal de source com a mesma chave e abrir o
+  arquivo local resultante.
+
+Ao abrir o Studio pela extensão, acrescentar `inpaas-module-id` à URL quando
+houver módulo ativo. O form do Studio deve validar esse `id` contra os módulos
+retornados pela API e priorizá-lo sobre `localStorage` na inicialização; depois,
+persiste a seleção pelo fluxo normal.
+
+Ao executar o Studio no Webview do VS Code, o iframe local não pode acessar
+propriedades da janela externa por `window.top` devido à política de mesma
+origem. Ações de modal no form do Studio devem resolver `top.showModal` dentro
+de `try/catch` e usar uma implementação local compatível como fallback. Não
+presumir que `/static/js/home.js` exponha `showModal` no iframe do Studio.
 
 O código-fonte oficial fica em `vscode-extension/` deste kit. Não manter cópias divergentes dentro dos projetos.

@@ -133,6 +133,54 @@ Informe a chave lógica usada pela plataforma. A API retorna `key` sem extensão
 Ao salvar, o mesmo contrato é enviado para `/api/vs-code/sources/publish`:
 `key` sem extensão, `type` (`js`, `css` ou `html`) e `content`.
 
+## Studio dentro do VS Code
+
+Execute `inPaaS: Studio` para abrir o form do Studio em uma aba do editor. A
+aba usa `inpaas.serverUrl` e o caminho configurado em `inpaas.studioPath`, cujo
+valor padrão é:
+
+`/forms/inpaas.devstudio.forms.studio/`
+
+## Barra lateral inPaaS
+
+A extensão adiciona o ícone **inPaaS** à Activity Bar. A view **Módulo ativo**
+permite selecionar, pela API local `GET /api/studio/apps`, um módulo do
+ambiente configurado para cada projeto do workspace. A seleção guarda o `id`,
+a chave e o título do módulo no estado do workspace, separado também pela URL
+do ambiente, e será usada pelos fluxos
+que dependem de contexto de módulo, como criação de forms, sources e labels.
+
+O container lateral chama-se **inPaaS** e possui as views nativas **Module**,
+**Forms**, **Sources**, **Entity**, **Database** e **Studio**, separadas visualmente como no Containers do Docker. O
+título de **Module** mostra o módulo selecionado e seu conteúdo é **Select**;
+**Forms** e **Sources** contêm **New** e **Download**; **Database** contém
+**New Query**; **Entity** contém **Download**; e **Studio**, exibido depois de
+**Database**, contém **Open**. Os comandos continuam disponíveis na Paleta de
+Comandos.
+
+Ao abrir o Studio pelo VS Code, a extensão envia o `id` do módulo ativo na
+URL. O Studio prioriza esse valor em relação ao módulo salvo no `localStorage`,
+desde que o módulo ainda esteja disponível no ambiente, e então o persiste para
+as próximas aberturas.
+
+O botão **Novo Form v1** abre duas etapas nativas: a chave, iniciada por
+`{chave-do-módulo}.forms.`, e o nome exibido, sugerido pelo último segmento da
+chave e livre para edição. A extensão cria o form em
+`POST /api/studio/modules/{moduleId}/forms` com o `id` do módulo ativo, baixa
+o recurso e abre os fragmentos locais resultantes.
+
+**Novo Source** primeiro seleciona o tipo, depois solicita a chave iniciada
+por `{chave-do-módulo}.` e, por fim, o nome exibido. Para `REST Service`, o
+nome sugerido é o último segmento da chave; para os outros tipos, segue a
+convenção do Studio de converter os segmentos em PascalCase e remover os
+pontos. A criação usa `POST /api/studio/sources` com o `id` do módulo ativo,
+baixa e abre o source resultante.
+
+O runtime encaminha esse form para o ambiente remoto usando a mesma
+autenticação configurada para o proxy local. A aba é reutilizada enquanto
+estiver aberta; sources, forms e outros arquivos continuam sendo editados pelo
+fluxo local normal.
+
 Execute `node start-local.js` na pasta do projeto e mantenha o terminal aberto. Esse inicializador chama o runtime compartilhado do `inpaas-dev-kit` sem depender da política de execução de PowerShell. `start-local.ps1` permanece como alternativa legada.
 
 Confira o endereço exibido por `Dashboard disponível em ...`: ele deve coincidir com `inpaas.serverUrl` no VS Code (padrão `http://127.0.0.1:8080`). O runtime usa `PLATFORM_PORT` quando definida. Um processo Node ativo, sozinho, não confirma que o proxy está escutando nessa porta.
@@ -241,6 +289,8 @@ Os metadados são carregados uma vez por sessão. Execute
 ## Configurações
 
 - `inpaas.serverUrl`: padrão `http://127.0.0.1:8080`.
+- `inpaas.studioPath`: padrão
+  `/forms/inpaas.devstudio.forms.studio/`.
 - `inpaas.sourceDownloadPath`: padrão `/__platform/source`.
 - `inpaas.formDownloadPath`: padrão `/__platform/form`.
 - `inpaas.entityDownloadPath`: padrão
@@ -254,6 +304,73 @@ Os metadados são carregados uma vez por sessão. Execute
 O servidor usa `SOURCE_AUTO_PUBLISH` e `FORM_AUTO_PUBLISH` para habilitar os
 watchers. Os endpoints remotos de publicação são configurados por
 `SOURCE_PUBLISH_PATH` e `FORM_PUBLISH_PATH`.
+
+## 0.6.18 — Módulo ativo
+
+Adicionada a view `inPaaS` na Activity Bar para escolher e persistir o módulo
+ativo por projeto e ambiente.
+
+## 0.6.20 — Novo Form v1
+
+Adicionado o comando `inPaaS: Novo Form v1`, disponível nas ações do módulo
+ativo na view inPaaS. Ele exige módulo ativo, cria pelo contrato do Studio e
+baixa o form automaticamente para edição local.
+
+## 0.6.21 — Ações do módulo
+
+As ações do módulo ativo foram movidas do cabeçalho para dentro da view
+**Módulo ativo**.
+
+## 0.6.22 — Navegação em árvore
+
+A view inPaaS passou a separar módulo e forms em grupos expansíveis, seguindo
+o padrão de listas da barra lateral do VS Code.
+
+## 0.6.23 — Ajustes da navegação
+
+O Studio voltou a ser uma ação isolada no cabeçalho; os grupos principais não
+exibem ícones nem a chave do módulo.
+
+## 0.6.24 — Rótulos das ações
+
+As ações da árvore usam rótulos curtos em inglês: **Select**, **New** e
+**Download**.
+
+## 0.6.25 — Views nativas
+
+Module e Forms passaram a ser views separadas, reproduzindo os separadores e a
+ausência de guias de indentação do layout do Containers.
+
+## 0.6.26 — Studio na barra lateral
+
+Studio deixou de ser uma ação no cabeçalho de Module e passou a ser uma view
+própria, exibida depois de Forms, com a ação **Open**.
+
+## 0.6.27 — Sources na barra lateral
+
+Adicionada a view **Sources**, com as ações **New** e **Download**. A criação
+reproduz as sugestões de chave e nome do template do Studio e usa o módulo
+ativo.
+
+## 0.6.28 — Contexto de módulo no Studio
+
+O comando de abrir Studio passa o módulo ativo da extensão para o Studio, que o
+seleciona antes de consultar o valor persistido no `localStorage`.
+
+## 0.6.29 — Database na barra lateral
+
+Adicionada a view **Database** entre **Sources** e **Studio**, com a ação
+**New Query**, que reutiliza o editor SQL já existente.
+
+## 0.6.30 — Entity na barra lateral
+
+Adicionada a view **Entity** entre **Sources** e **Database**, com a ação
+**Download**, que reutiliza o download de entity existente.
+
+## 0.6.31 — Ícone code
+
+O ícone da Activity Bar do inPaaS passou a usar o Codicon **code**, alinhado ao
+ícone do Studio.
 
 ## 0.6.12 — Resultado abaixo do SQL
 O resultado abre no grupo abaixo do SQL usando moveEditorToBelowGroup. Execuções seguintes reutilizam o grupo do resultado e o foco retorna ao SQL.

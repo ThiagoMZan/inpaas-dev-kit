@@ -141,6 +141,57 @@ ordenação apenas contra as colunas declaradas no contrato do serviço. Em form
 strategies, a inicialização deve ser idempotente e os eventos dos botões de
 linha devem ser delegados e possuir namespace próprio.
 
+### DataTable com serviço EAI customizado
+
+Quando a listagem usa um source de serviço já cadastrado, a URL segue:
+
+```text
+/api/eai-services/{source-key}/{method-name}
+```
+
+Passar filtros de contexto por `onAjaxData`, mantendo a leitura do campo atual
+a cada requisição:
+
+```javascript
+onAjaxData: function (data) {
+  data.integrationcode = $.trim($form.find('#txt-person-integration').val() || '');
+}
+```
+
+O método do source deve devolver diretamente o contrato server-side do
+DataTables:
+
+```javascript
+{
+  draw: draw,
+  recordsTotal: total,
+  recordsFiltered: totalFiltrado,
+  data: rows
+}
+```
+
+Para entidades da plataforma, montar a consulta com `src.knex(...)`, aplicar o
+filtro obrigatório, `orderBy`, `offset`, `fetchNext` e `withDataTable()` antes
+de terminar com `.find()`. Assim, a busca, a paginação e a contagem ocorrem no
+banco, sem carregar a coleção inteira para paginá-la em JavaScript.
+
+Não consultar a entidade inteira quando o filtro contextual obrigatório estiver
+vazio: devolver uma lista vazia com totais zero. Configurar `ordering: false`
+quando o serviço não implementa a ordenação enviada pelo DataTables. Para datas
+normalizadas pelo serviço como `yyyy-MM-dd HH:mm:ss`, usar o renderer já
+referenciado:
+
+```javascript
+render: $.fn.dataTable.render.moment(
+  'YYYY-MM-DD HH:mm:ss',
+  'DD/MM/YYYY HH:mm'
+)
+```
+
+Desabilitar os botões de edição, exclusão, exportação e configurações que não
+façam parte da listagem, em vez de deixá-los apontar para os serviços CRUD
+padrão.
+
 ### `oneMediaUploader`
 
 O uploader compartilhado não deve incorporar limites de um canal. Configure por instância:

@@ -7,6 +7,7 @@ Antes de atuar em qualquer projeto que referencie este kit, leia integralmente:
 - `docs/platform.md` para contratos de sources, forms, Nashorn e execução local;
 - `docs/form-design.md` quando houver leitura, criação ou alteração do XML de design de forms tradicionais;
 - `docs/form-data-binding.md` quando fields forem ligados a entities ou o trabalho envolver save e mestre-detalhe;
+- `docs/read-only-detail-forms.md` quando o trabalho envolver criação ou alteração de fichas HTML somente leitura baseadas em pattern, inclusive quando o usuário mencionar "template de ficha de atendimento";
 - `docs/corporate-identification.md` quando o trabalho envolver busca ou identificação corporativa de pessoas;
 - `docs/frontend-plugins.md` quando houver HTML, CSS ou plugins JavaScript/jQuery;
 - `docs/labels.md` quando o trabalho envolver criação, alteração, consulta ou

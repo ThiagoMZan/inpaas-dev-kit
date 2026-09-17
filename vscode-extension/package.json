@@ -2,7 +2,7 @@
   "name": "inpaas-source-tools",
   "displayName": "inPaaS Studio Tools",
   "description": "Integração local do VS Code com sources, forms e entities existentes na plataforma inPaaS.",
-  "version": "0.6.15",
+  "version": "0.6.31",
   "publisher": "inpaas-local",
   "engines": {
     "vscode": "^1.85.0"
@@ -21,6 +21,10 @@
     "onCommand:inpaas.executeQuery",
     "onCommand:inpaas.formatSql",
     "onCommand:inpaas.refreshDatabaseMetadata",
+    "onCommand:inpaas.openStudio",
+    "onCommand:inpaas.selectModule",
+    "onCommand:inpaas.createForm",
+    "onCommand:inpaas.createSource",
     "onCommand:inpaas.openIncludedForm",
     "onLanguage:javascript",
     "onLanguage:javascriptreact",
@@ -77,8 +81,73 @@
         "command": "inpaas.refreshDatabaseMetadata",
         "title": "Atualizar metadados do banco",
         "category": "inPaaS"
+      },
+      {
+        "command": "inpaas.openStudio",
+        "title": "Studio",
+        "category": "inPaaS"
+      },
+      {
+        "command": "inpaas.selectModule",
+        "title": "Selecionar módulo",
+        "category": "inPaaS"
+      },
+      {
+        "command": "inpaas.createForm",
+        "title": "Novo Form v1",
+        "category": "inPaaS",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "inpaas.createSource",
+        "title": "Novo Source",
+        "category": "inPaaS",
+        "icon": "$(new-file)"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "inpaas",
+          "title": "inPaaS",
+          "icon": "media/inpaas.svg"
+        }
+      ]
+    },
+    "views": {
+      "inpaas": [
+        {
+          "id": "inpaas.moduleContext",
+          "name": "Module",
+          "icon": "media/inpaas.svg"
+        },
+        {
+          "id": "inpaas.forms",
+          "name": "Forms",
+          "icon": "media/inpaas.svg"
+        },
+        {
+          "id": "inpaas.sources",
+          "name": "Sources",
+          "icon": "media/inpaas.svg"
+        },
+        {
+          "id": "inpaas.entities",
+          "name": "Entity",
+          "icon": "media/inpaas.svg"
+        },
+        {
+          "id": "inpaas.database",
+          "name": "Database",
+          "icon": "media/inpaas.svg"
+        },
+        {
+          "id": "inpaas.studio",
+          "name": "Studio",
+          "icon": "media/inpaas.svg"
+        }
+      ]
+    },
     "menus": {
       "explorer/context": [
         {
@@ -123,6 +192,11 @@
           "type": "string",
           "default": "http://127.0.0.1:8080",
           "description": "URL do servidor local da integração inPaaS."
+        },
+        "inpaas.studioPath": {
+          "type": "string",
+          "default": "/forms/inpaas.devstudio.forms.studio/",
+          "description": "Caminho do form do Studio aberto dentro do VS Code."
         },
         "inpaas.sourceDownloadPath": {
           "type": "string",

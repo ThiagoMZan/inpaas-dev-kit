@@ -23,6 +23,7 @@ const formPublishPath = process.env.FORM_PUBLISH_PATH ||
   '/api/vs-code/forms/publish';
 const sourceAutoPublish = process.env.SOURCE_AUTO_PUBLISH !== 'false';
 const formAutoPublish = process.env.FORM_AUTO_PUBLISH !== 'false';
+const studioFormPath = '/forms/inpaas.devstudio.forms.studio/';
 const sourcePublishTimers = new Map();
 const formPublishTimers = new Map();
 const ignoredSourceWrites = new Map();
@@ -44,10 +45,18 @@ const contentTypes = {
 function isProxyRequest(pathname) {
   return pathname === '/api' ||
     pathname.indexOf('/api/') === 0 ||
+    pathname === '/api-controller' ||
+    pathname.indexOf('/api-controller/') === 0 ||
+    pathname === '/forms' ||
+    pathname.indexOf('/forms/') === 0 ||
     pathname === '/eai' ||
     pathname.indexOf('/eai/') === 0 ||
     pathname === '/static' ||
-    pathname.indexOf('/static/') === 0;
+    pathname.indexOf('/static/') === 0 ||
+    pathname === '/web' ||
+    pathname.indexOf('/web/') === 0 ||
+    pathname === '/includes' ||
+    pathname.indexOf('/includes/') === 0;
 }
 
 function getSanitizedProxyPath(requestUrl) {
@@ -93,7 +102,8 @@ function copyRequestHeaders(request) {
   return headers;
 }
 
-function copyResponseHeaders(upstreamResponse) {
+function copyResponseHeaders(upstreamResponse, options) {
+  options = options || {};
   const excludedHeaders = new Set([
     'connection',
     'content-encoding',
@@ -101,6 +111,10 @@ function copyResponseHeaders(upstreamResponse) {
     'set-cookie',
     'transfer-encoding'
   ]);
+
+  if (options.allowFrameEmbedding) {
+    excludedHeaders.add('x-frame-options');
+  }
   const headers = {};
 
   upstreamResponse.headers.forEach(function (value, name) {
@@ -453,7 +467,7 @@ function getLocalFormInclude(pathname) {
 }
 
 function getLocalFormPage(pathname) {
-  const match = /^\/forms\/([^/]+)\/?$/i.exec(pathname);
+  const match = /^\/local-forms\/([^/]+)\/?$/i.exec(pathname);
 
   if (!match) return null;
 
@@ -1042,7 +1056,8 @@ function watchForms() {
   );
 }
 
-async function proxyApiRequest(request, response, requestUrl) {
+async function proxyApiRequest(request, response, requestUrl, options) {
+  options = options || {};
   if (!apiBaseUrl) {
     response.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' });
     response.end(JSON.stringify({
@@ -1073,7 +1088,7 @@ async function proxyApiRequest(request, response, requestUrl) {
 
     response.writeHead(
       upstreamResponse.status,
-      copyResponseHeaders(upstreamResponse)
+      copyResponseHeaders(upstreamResponse, options)
     );
     response.end(responseBody);
   } catch (error) {
@@ -1087,12 +1102,21 @@ async function proxyApiRequest(request, response, requestUrl) {
 
 const server = http.createServer(function (request, response) {
   const requestUrl = new URL(request.url, 'http://' + request.headers.host);
+  const isStudioForm = request.method === 'GET' &&
+    requestUrl.pathname.toLowerCase().replace(/\/*$/, '/') === studioFormPath;
   const localFormInclude = request.method === 'GET'
     ? getLocalFormInclude(requestUrl.pathname)
     : null;
   const localFormPage = request.method === 'GET'
-    ? getLocalFormPage(requestUrl.pathname)
+    ? (isStudioForm ? null : getLocalFormPage(requestUrl.pathname))
     : null;
+
+  if (isStudioForm) {
+    proxyApiRequest(request, response, requestUrl, {
+      allowFrameEmbedding: true
+    });
+    return;
+  }
 
   if (localFormPage) {
     fs.stat(localFormPage.filePath, function (error, stats) {
@@ -1119,8 +1143,7 @@ const server = http.createServer(function (request, response) {
   if (localFormInclude) {
     fs.stat(localFormInclude.filePath, function (error, stats) {
       if (error || !stats.isFile()) {
-        response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-        response.end('Fragmento do form não encontrado.');
+        proxyApiRequest(request, response, requestUrl);
         return;
       }
 
