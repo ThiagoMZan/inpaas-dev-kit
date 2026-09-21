@@ -22,6 +22,22 @@ source/
 - Publicação: `POST /api/vs-code/sources/publish` com o mesmo contrato.
 - Excluir um arquivo local nunca publica nem exclui o cadastro remoto.
 
+#### Metadados do Source no editor visual
+
+O editor visual de Source usa o form `inpaas.devstudio.source-vs-code.main` no
+Webview. Os dados do cadastro vêm de `CORE_PATTERN`, por:
+
+- `GET /api/vs-code/sources/{key}/metadata`;
+- `POST /api/vs-code/sources/{key}/metadata`, com `{ model }`.
+
+O contrato expõe `DS_KEY`, `DS_PATTERNNAME`, `ID_MODULE`,
+`ID_PATTERNTYPE` e `DO_ALLOWANON`, além das listas de módulos e tipos oficiais.
+Durante edição, `DS_KEY` é somente leitura; a gravação deve validar que a key do
+payload coincide com a key da rota antes de atualizar nome, módulo, tipo e
+acesso anônimo. O editor é aberto pelo comando de Explorer
+`inPaaS: Open Source Editor`. Criar um Source pelo kit continua abrindo o
+arquivo de código recém-baixado.
+
 O `require()` Nashorn usa a chave cadastrada, sem acrescentar a extensão do arquivo local:
 
 ```js
@@ -122,22 +138,89 @@ local, a chave é recuperada da pasta e o SFC é desmontado e enviado como
 
 O extrator atual suporta um `<template>`, um `<script>` e no máximo um `<style>` opcional. Não suporta `script setup`, múltiplos estilos ou preprocessadores.
 
+### Permissões
+
+O editor visual de permissões do VS Code usa diretamente a API IAM já exposta
+pelo Studio e exige módulo ativo selecionado:
+
+- `GET /api/iam/permissions?module={moduleId}` lista as permissões resumidas;
+- `GET /api/iam/permissions/{id}` devolve key, label, group e flags completos;
+- `POST /api/iam/permissions` cria, com `moduleId`, `key`, `label`, `group`,
+  `types` e `forms`;
+- `PUT /api/iam/permissions/{id}` atualiza o mesmo contrato;
+- `DELETE /api/iam/permissions/{id}` remove a permissão após confirmação do
+  usuário.
+
+Os flags estão em `types`: `view`, `insert`, `update`, `delete` e `execute`.
+O editor local não vincula forms relacionados neste fluxo: envia `forms: []`.
+
+### Menus
+
+O editor visual de menus usa o form `inpaas.devstudio.menu-vs-code.main` e a
+API já usada pelo Studio. O menu é global: não exige módulo ativo, embora cada
+item possua e grave seu próprio `module`.
+
+- `GET /api/studio/apps` fornece os módulos para o formulário;
+- `GET /api/studio/modules/{moduleId}/menu` devolve a árvore completa;
+- `GET /api/studio/modules/{item.module}/menu/{item.key}` abre o item completo;
+- `POST /api/studio/modules/{item.module}/menu` cria/atualiza;
+- `DELETE /api/studio/modules/{item.module}/menu/{item.key}` remove após
+  confirmação explícita.
+
+O editor preserva os campos `key`, `module`, `parent`, `type`, `sequence`,
+`label`, `icon`, `formType`, `form`, `link` e `policyId`. Key vazia é aceita:
+o serviço oficial gera a chave técnica, como no Studio.
+
 ### Entities
 
-Entities são baixadas pelo nome físico e armazenadas em `entities/`:
+O editor visual do VS Code usa exclusivamente um modelo JSON local.
 
 ```text
 entities/
-└── entity-model-crm_sm_post_sched.xml
+└── crm_casefollowup.entity.json
 ```
 
-- Download: `GET /api/entity-management/entities/{entityName}/xml`.
-- O nome retornado em `Content-Disposition` é usado quando estiver disponível.
-- Sem nome na resposta, usar `{entityName}.xml`.
-- Um arquivo existente com o mesmo nome é substituído.
-- O download não cria nem altera o cadastro da entidade na plataforma.
-- No Explorer, `Download/Update` reconhece o XML em `entities/`, obtém o nome
-  físico pelo atributo `name` e baixa novamente a entidade.
+#### Modelo JSON local
+
+- Download: `GET /api/vs-code/entities/{entityName}`.
+- Labels: `GET /api/vs-code/entities/{entityName}/labels`. A rota lê
+  diretamente `CORE_LABEL` por `DS_KEY` e retorna `DS_DESCRIPTION`; não consulta
+  `CORE_MODULELABEL`.
+- O endpoint é fornecido pelo source `inpaas.studio.vs-code`, com a leitura em
+  `inpaas.studio.vscode.utils`.
+- Ele devolve o `DatabaseEntity` completo: cabeçalho, atributos/domains,
+  referências, índices, queries, triggers e finders.
+- A extensão grava `entities/{entityName-em-minúsculas}.entity.json`, com
+  formatação JSON de dois espaços.
+- O download e o save local são somente leitura/escrita no workspace; não
+  criam, publicam ou alteram a entity no ambiente.
+
+#### Persistência de referência
+
+`OBJETOBD` contém o cabeçalho da entity, módulo, auditoria, ownership,
+validator, vínculo de form e os JSONs `TX_JSONINDEXES`, `TX_JSONREFS`,
+`TX_JSONQUERIES` e `TX_JSONTRIGGER`. `CAMPOBD` contém os campos, ordem, tipo,
+tamanho, escala, PK, required, default, alias e domains por estruturas
+relacionadas. Referências e chaves também possuem estruturas auxiliares do
+legado.
+
+Essas tabelas explicam o modelo, mas o VS Code não deve atualizá-las por SQL
+direto. A futura publicação deve usar um adaptador de domínio que valide e
+aplique o modelo completo.
+
+#### Publicação manual
+
+Salvar `.entity.json` nunca publica a entity. A IA pode editar o artefato
+local, mas não pode disparar publicação, alterar schema, gravar labels ou
+vincular form relacionado.
+
+O botão **Publicar** do editor chama `POST /api/vs-code/entities/publish` de
+forma explícita. O endpoint encaminha o payload normalizado ao serviço nativo
+`require('inpaas.devstudio.service.entitymanagement').setEntity(entity)`, o
+mesmo fluxo usado pelo Studio. Portanto, regras de metadados, labels,
+`OBJETOBD`, `CAMPOBD` e DDL pertencem à plataforma e usam sua própria credencial
+de banco. As labels seguem no payload. Não há publicação automática; o mesmo
+endpoint será reutilizado pelo futuro comando do Explorer.
 
 #### Convenções para atributos
 
@@ -235,6 +318,7 @@ A extensão compartilhada oferece:
 - editor e executor SQL paginado;
 - autocomplete de tabelas e colunas.
 - view `Entity`, exibida após `Sources`, com a ação `Download`, que reutiliza o download de entity existente;
+- editor visual local de entity, aberto sobre um arquivo `.entity.json` pelo comando `inPaaS: Open Editor` ou menu do Explorer. Ele abre o form `inpaas.devstudio.entity-vs-code.main` no Webview e troca o modelo JSON por `postMessage`; não existe publicação automática nem manual de entities nesse fluxo;
 - view `Database`, exibida após `Entity`, com a ação `New Query`, que reutiliza o editor SQL existente;
 - view `Studio`, exibida após `Database`, com a ação `Open` que abre o form do Studio pela URL do proxy local configurada no workspace.
 
@@ -260,8 +344,9 @@ conversa ou de valores de `localStorage` do Studio.
 #### Novo Form
 
 - Escopo: apenas Form **v1**. Não criar nem oferecer `form-v2` neste fluxo.
-- Chave: iniciar em `{module.key}.forms.`; ela é obrigatória, deve ter ao menos
-  um segmento após esse prefixo e não pode conter espaços.
+- Chave: sugerir inicialmente `{module.key}.forms.`. Ela é obrigatória e não
+  pode conter espaços, mas o usuário pode substituir livremente a sugestão;
+  não exigir prefixo de módulo.
 - Nome: obrigatório e editável; a sugestão é o último segmento da chave após
   `{module.key}.forms.`.
 - Criar com `POST /api/studio/modules/{module.id}/forms`, `Content-Type:
@@ -281,8 +366,9 @@ conversa ou de valores de `localStorage` do Studio.
 
 #### Novo Source
 
-- Chave: iniciar em `{module.key}.`; ela é obrigatória, deve ter ao menos um
-  segmento após esse prefixo e não pode conter espaços.
+- Chave: sugerir inicialmente `{module.key}.`. Ela é obrigatória e não pode
+  conter espaços, mas o usuário pode substituir livremente a sugestão; não
+  exigir prefixo de módulo.
 - Nome: obrigatório e editável. Para tipo `1` (REST Service), sugerir o último
   segmento da chave após o prefixo. Para os outros tipos, converter os
   segmentos após o prefixo em PascalCase e remover os pontos.
@@ -330,5 +416,38 @@ propriedades da janela externa por `window.top` devido à política de mesma
 origem. Ações de modal no form do Studio devem resolver `top.showModal` dentro
 de `try/catch` e usar uma implementação local compatível como fallback. Não
 presumir que `/static/js/home.js` exponha `showModal` no iframe do Studio.
+
+### Padrão obrigatório para editores visuais no Webview
+
+Todo editor visual hospedado no VS Code deve reutilizar o wrapper do editor de
+entities. A página do Webview que contém o iframe precisa aplicar estas regras
+ao mesmo tempo:
+
+```css
+html, body, iframe {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  display: block;
+  border: 0;
+  overflow: hidden;
+}
+```
+
+Não omitir `padding: 0`: o Webview do VS Code pode fornecer padding padrão no
+`body`, gerando bordas assimétricas e reduzindo a área do iframe. O painel deve
+usar `retainContextWhenHidden: true` quando preservar estado for desejável.
+
+Dentro do form carregado no iframe, a rolagem deve ficar no container de
+conteúdo, nunca no documento externo. Para manter respiro idêntico nos dois
+lados quando houver barra de rolagem, usar `box-sizing: border-box`, largura
+máxima de `100%` e `scrollbar-gutter: stable both-edges` no container rolável.
+
+As abas de novos editores devem seguir `.entity-tabs`: `display: flex`, linha
+inferior `#343434`, links sem bordas Bootstrap e indicador de 2px `#3794ff`
+via pseudo-elemento na aba ativa. Isso evita que o hover cubra o indicador e
+preserva a identidade visual comum entre editores.
 
 O código-fonte oficial fica em `vscode-extension/` deste kit. Não manter cópias divergentes dentro dos projetos.

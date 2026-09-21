@@ -13,6 +13,8 @@ const apiPassword = process.env.PLATFORM_API_PASSWORD || '';
 const sourceDirectory = path.join(rootDirectory, 'source');
 const formsDirectory = path.join(rootDirectory, 'forms');
 const formsVueDirectory = path.join(rootDirectory, 'forms-vue');
+const entitiesDirectory = path.join(rootDirectory, 'entities');
+const modulesDirectory = path.join(rootDirectory, 'modules');
 const sourcePublishPath = process.env.SOURCE_PUBLISH_PATH ||
   '/api/vs-code/sources/publish';
 const sourceDownloadPathTemplate = process.env.SOURCE_DOWNLOAD_PATH ||
@@ -1228,6 +1230,8 @@ const server = http.createServer(function (request, response) {
 });
 
 server.listen(port, host, function () {
+  fs.mkdirSync(entitiesDirectory, { recursive: true });
+  fs.mkdirSync(modulesDirectory, { recursive: true });
   console.log('Dashboard disponível em http://' + host + ':' + port);
   if (apiBaseUrl) {
     console.log('Proxy /api e /eai ativo para ' + new URL(apiBaseUrl).origin);

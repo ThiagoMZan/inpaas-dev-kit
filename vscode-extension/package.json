@@ -2,7 +2,7 @@
   "name": "inpaas-source-tools",
   "displayName": "inPaaS Studio Tools",
   "description": "Integração local do VS Code com sources, forms e entities existentes na plataforma inPaaS.",
-  "version": "0.6.31",
+  "version": "0.6.80",
   "publisher": "inpaas-local",
   "engines": {
     "vscode": "^1.85.0"
@@ -14,6 +14,25 @@
     "onCommand:inpaas.downloadSource",
     "onCommand:inpaas.downloadForm",
     "onCommand:inpaas.downloadEntity",
+    "onCommand:inpaas.createEntity",
+    "onCommand:inpaas.openEntityEditor",
+    "onCommand:inpaas.openFormEditor",
+    "onCommand:inpaas.openSourceEditor",
+    "onCommand:inpaas.openSearch",
+    "onCommand:inpaas.createApplication",
+    "onCommand:inpaas.createModule",
+    "onCommand:inpaas.openRelease",
+    "onCommand:inpaas.openLabels",
+    "onCommand:inpaas.openPermissions",
+    "onCommand:inpaas.openMenus",
+    "onCommand:inpaas.openBusinessProperties",
+    "onCommand:inpaas.openModuleSettings",
+    "onCommand:inpaas.downloadModule",
+    "onCommand:inpaas.publishEntity",
+    "onCommand:inpaas.downloadSourceResource",
+    "onCommand:inpaas.publishSourceResource",
+    "onCommand:inpaas.downloadFormResource",
+    "onCommand:inpaas.publishFormResource",
     "onCommand:inpaas.copyKey",
     "onCommand:inpaas.downloadOrUpdateResource",
     "onCommand:inpaas.publishResource",
@@ -37,7 +56,7 @@
     "commands": [
       {
         "command": "inpaas.downloadSource",
-        "title": "Baixar source",
+        "title": "inPaaS: Download Source",
         "category": "inPaaS"
       },
       {
@@ -47,8 +66,48 @@
       },
       {
         "command": "inpaas.downloadEntity",
-        "title": "Baixar entity",
+        "title": "inPaaS: Download Entity",
         "category": "inPaaS"
+      },
+      {
+        "command": "inpaas.createEntity",
+        "title": "inPaaS: New Entity",
+        "category": "inPaaS",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "inpaas.openEntityEditor",
+        "title": "inPaaS: Open Entity Editor",
+        "category": "inPaaS"
+      },
+      {
+        "command": "inpaas.openFormEditor",
+        "title": "inPaaS: Open Form Editor"
+      },
+      {
+        "command": "inpaas.openSourceEditor",
+        "title": "inPaaS: Open Source Editor"
+      },
+      {
+        "command": "inpaas.publishEntity",
+        "title": "inPaaS: Publish Entity",
+        "category": "inPaaS"
+      },
+      {
+        "command": "inpaas.downloadSourceResource",
+        "title": "inPaaS: Download Source"
+      },
+      {
+        "command": "inpaas.publishSourceResource",
+        "title": "inPaaS: Publish Source"
+      },
+      {
+        "command": "inpaas.downloadFormResource",
+        "title": "inPaaS: Download Form"
+      },
+      {
+        "command": "inpaas.publishFormResource",
+        "title": "inPaaS: Publish Form"
       },
       {
         "command": "inpaas.copyKey",
@@ -88,19 +147,77 @@
         "category": "inPaaS"
       },
       {
+        "command": "inpaas.openSearch",
+        "title": "inPaaS: Search",
+        "category": "inPaaS",
+        "icon": "$(search)"
+      },
+      {
+        "command": "inpaas.createApplication",
+        "title": "inPaaS: New Application",
+        "category": "inPaaS",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "inpaas.createModule",
+        "title": "inPaaS: New Module",
+        "category": "inPaaS",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "inpaas.openRelease",
+        "title": "inPaaS: New Release",
+        "category": "inPaaS",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "inpaas.openLabels",
+        "title": "inPaaS: Labels",
+        "category": "inPaaS",
+        "icon": "$(tag)"
+      },
+      {
+        "command": "inpaas.openPermissions",
+        "title": "inPaaS: Permissions",
+        "category": "inPaaS",
+        "icon": "$(lock)"
+      },
+      {
+        "command": "inpaas.openMenus",
+        "title": "inPaaS: Menus",
+        "category": "inPaaS",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "inpaas.openBusinessProperties",
+        "title": "inPaaS: Business Properties",
+        "category": "inPaaS",
+        "icon": "$(symbol-property)"
+      },
+      {
+        "command": "inpaas.openModuleSettings",
+        "title": "inPaaS: Module Settings",
+        "category": "inPaaS"
+      },
+      {
+        "command": "inpaas.downloadModule",
+        "title": "inPaaS: Download Module",
+        "category": "inPaaS"
+      },
+      {
         "command": "inpaas.selectModule",
         "title": "Selecionar módulo",
         "category": "inPaaS"
       },
       {
         "command": "inpaas.createForm",
-        "title": "Novo Form v1",
+        "title": "inPaaS: New Form",
         "category": "inPaaS",
         "icon": "$(new-file)"
       },
       {
         "command": "inpaas.createSource",
-        "title": "Novo Source",
+        "title": "inPaaS: New Source",
         "category": "inPaaS",
         "icon": "$(new-file)"
       }
@@ -151,18 +268,83 @@
     "menus": {
       "explorer/context": [
         {
-          "command": "inpaas.copyKey",
-          "when": "resourceScheme == file",
+          "command": "inpaas.openEntityEditor",
+          "when": "resourceScheme == file && resourceFilename =~ /.+\\.entity\\.json$/",
+          "group": "inpaas@0"
+        },
+        {
+          "command": "inpaas.openFormEditor",
+          "when": "resourceScheme == file && resourcePath =~ /forms/ && resourceFilename != 'forms' && resourceFilename != 'forms-vue'",
           "group": "inpaas@1"
         },
         {
-          "command": "inpaas.downloadOrUpdateResource",
-          "when": "resourceScheme == file",
+          "command": "inpaas.openSourceEditor",
+          "when": "resourceScheme == file && resourcePath =~ /source/ && resourceFilename != 'source' && resourceFilename != 'sources'",
+          "group": "inpaas@1"
+        },
+        {
+          "command": "inpaas.createEntity",
+          "when": "explorerResourceIsFolder && resourceScheme == file && resourceFilename == entities",
+          "group": "inpaas@0"
+        },
+        {
+          "command": "inpaas.createForm",
+          "when": "explorerResourceIsFolder && resourceScheme == file && resourceFilename =~ /^(forms|forms-vue)$/",
+          "group": "inpaas@0"
+        },
+        {
+          "command": "inpaas.createSource",
+          "when": "explorerResourceIsFolder && resourceScheme == file && resourceFilename =~ /^(source|sources)$/",
+          "group": "inpaas@0"
+        },
+        {
+          "command": "inpaas.downloadEntity",
+          "when": "resourceScheme == file && resourceFilename =~ /.+\\.entity\\.json$/",
           "group": "inpaas@2"
         },
         {
-          "command": "inpaas.publishResource",
-          "when": "resourceScheme == file",
+          "command": "inpaas.copyKey",
+          "when": "resourceScheme == file && resourcePath =~ /forms|source|entities/ && resourceFilename != 'forms' && resourceFilename != 'forms-vue' && resourceFilename != 'source' && resourceFilename != 'sources'",
+          "group": "inpaas@0"
+        },
+        {
+          "command": "inpaas.copyKey",
+          "when": "resourceScheme == file && resourcePath =~ /modules/",
+          "group": "inpaas@0"
+        },
+        {
+          "command": "inpaas.openModuleSettings",
+          "when": "resourceScheme == file && resourcePath =~ /modules/",
+          "group": "inpaas@1"
+        },
+        {
+          "command": "inpaas.publishEntity",
+          "when": "resourceScheme == file && resourceFilename =~ /.+\\.entity\\.json$/",
+          "group": "inpaas@3"
+        },
+        {
+          "command": "inpaas.downloadSourceResource",
+          "when": "resourceScheme == file && resourcePath =~ /source/ && resourceFilename != 'source' && resourceFilename != 'sources'",
+          "group": "inpaas@2"
+        },
+        {
+          "command": "inpaas.publishSourceResource",
+          "when": "resourceScheme == file && resourcePath =~ /source/ && resourceFilename != 'source' && resourceFilename != 'sources'",
+          "group": "inpaas@3"
+        },
+        {
+          "command": "inpaas.downloadFormResource",
+          "when": "resourceScheme == file && resourcePath =~ /forms/ && resourceFilename != 'forms' && resourceFilename != 'forms-vue'",
+          "group": "inpaas@2"
+        },
+        {
+          "command": "inpaas.downloadModule",
+          "when": "resourceScheme == file && resourcePath =~ /modules/",
+          "group": "inpaas@2"
+        },
+        {
+          "command": "inpaas.publishFormResource",
+          "when": "resourceScheme == file && resourcePath =~ /forms/ && resourceFilename != 'forms' && resourceFilename != 'forms-vue'",
           "group": "inpaas@3"
         }
       ]
@@ -212,11 +394,6 @@
           "type": "string",
           "default": "/__platform/publish",
           "description": "Endpoint local usado para publicar manualmente um source ou form."
-        },
-        "inpaas.entityDownloadPath": {
-          "type": "string",
-          "default": "/api/entity-management/entities/{entityName}/xml",
-          "description": "Endpoint usado para baixar o XML de uma entidade."
         },
         "inpaas.entityDirectory": {
           "type": "string",

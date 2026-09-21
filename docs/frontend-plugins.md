@@ -208,3 +208,12 @@ Métodos: `value`, `setValue` e `setDisabled`. Eventos: `one:upload-start`, `cha
 
 O alternador recebe `views: [{ value, label, icon, disabled }]`, `value`, `ariaLabel` e `onChange`.
 Não deve conhecer previamente os nomes das visualizações. Métodos: `value` e `setValue`.
+
+### Padrão de editores VS Code
+
+Webviews com CodeMirror devem deixar o scroll no editor, nunca no iframe/página:
+usar a aba ativa como container flexível (`flex: 1; min-height: 0`) e, após a
+aba se tornar visível, chamar `editor.setSize('100%', alturaDaAba)` seguido de
+`editor.refresh()`. O botão Save deve ficar desabilitado durante a requisição e
+trocar temporariamente para `<i class="fa fa-spinner fa-spin"></i> Saving…`;
+ao terminar, restaurar `<i class="fa fa-save"></i> Save`.

@@ -102,7 +102,7 @@ O menu de contexto de arquivos em `source/`, `forms/`, `forms-vue/` e
   da pasta do form ou o nome físico da entity selecionada;
 - `Download/Update`: baixa novamente o mesmo recurso da plataforma usando os
   fluxos normais de download. Para forms, todos os fragmentos retornados são
-  atualizados juntos. Para entities, o nome físico é lido do XML selecionado;
+  atualizados juntos. Para entities, o nome físico é lido do modelo JSON selecionado;
 - `Publish`: salva buffers modificados e publica manualmente o source ou todos
   os fragmentos existentes do form. Entities não possuem publicação local.
 
@@ -204,14 +204,15 @@ consulta `/api/vs-code/forms/{key}` e cria automaticamente as pastas necessária
 Execute `inPaaS: Baixar entity` e informe o nome físico da entidade, por
 exemplo `CRM_SM_POST_SCHED`.
 
-A extensão consulta:
+A extensão consulta `GET /api/vs-code/entities/{entityName}` e
+`GET /api/vs-code/entities/{entityName}/labels`, salvando o modelo retornado
+como `entities/{entityName-em-minúsculas}.entity.json`. As labels são lidas
+diretamente de `CORE_LABEL` pela chave global, sem depender de módulo. Esse é o
+formato local do editor visual e contém a estrutura completa da entity.
 
-`/api/entity-management/entities/{entityName}/xml`
-
-O XML é salvo em `entities/`. Quando a resposta possuir um nome em
-`Content-Disposition`, esse nome é usado; caso contrário, o arquivo será
-`{entityName}.xml`. Um arquivo existente com o mesmo nome é substituído e o XML
-baixado é aberto no editor.
+O download e o save são locais. Nenhuma entity, label ou vínculo de form é
+publicado por save, watcher ou IA; a publicação será
+um comando manual explícito.
 
 ## Navegação por require
 
@@ -293,8 +294,6 @@ Os metadados são carregados uma vez por sessão. Execute
   `/forms/inpaas.devstudio.forms.studio/`.
 - `inpaas.sourceDownloadPath`: padrão `/__platform/source`.
 - `inpaas.formDownloadPath`: padrão `/__platform/form`.
-- `inpaas.entityDownloadPath`: padrão
-  `/api/entity-management/entities/{entityName}/xml`.
 - `inpaas.entityDirectory`: padrão `entities`.
 - `inpaas.sourceDirectory`: padrão `source`.
 - `inpaas.databaseQueryPath`: padrão `/api/studio/dbexplorer/v2/run`.
@@ -371,6 +370,18 @@ Adicionada a view **Entity** entre **Sources** e **Database**, com a ação
 
 O ícone da Activity Bar do inPaaS passou a usar o Codicon **code**, alinhado ao
 ícone do Studio.
+
+## 0.6.33 — Entity Editor v1
+
+A view **Entity** ganhou **Open Editor**, que abre um modelo `.entity.json`
+já baixado em uma aba visual. O save grava somente no workspace; entities não
+possuem publicação automática nesse fluxo.
+
+## 0.6.34 — Editor visual de entity
+
+**Open Editor** abre o form local `inpaas.devstudio.entity-vs-code.main` no
+Webview e troca o modelo JSON por uma ponte de mensagens. O save grava somente
+o JSON no workspace.
 
 ## 0.6.12 — Resultado abaixo do SQL
 O resultado abre no grupo abaixo do SQL usando moveEditorToBelowGroup. Execuções seguintes reutilizam o grupo do resultado e o foco retorna ao SQL.

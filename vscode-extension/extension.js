@@ -8,6 +8,11 @@ const pendingDownloads = new Map();
 const metadataCache = new Map();
 let queryResultPanel = null;
 let studioPanel = null;
+let searchPanel = null;
+let labelsPanel = null;
+let permissionsPanel = null;
+let menusPanel = null;
+let businessPropertiesPanel = null;
 let outputChannel = null;
 let moduleContextProvider = null;
 let formsProvider = null;
@@ -15,6 +20,8 @@ let sourcesProvider = null;
 let entitiesProvider = null;
 let databaseProvider = null;
 let studioProvider = null;
+const entityEditorPanels = new Map();
+const sourceEditorPanels = new Map();
 
 const MODULE_SELECTION_STATE_KEY = 'inpaas.selectedModules';
 const SOURCE_TYPES = [
@@ -376,7 +383,7 @@ ModuleContextProvider.prototype.getChildren = function () {
     return [item];
   }
 
-  return [createTreeAction('Select', 'plug', 'inpaas.selectModule')];
+  return [createTreeAction('Select Module', 'plug', 'inpaas.selectModule'), createTreeAction('Settings', 'gear', 'inpaas.openModuleSettings'), createTreeAction('Download Module', 'cloud-download', 'inpaas.downloadModule')];
 };
 
 function FormsProvider() {
@@ -417,7 +424,10 @@ EntitiesProvider.prototype.getTreeItem = function (item) {
 };
 
 EntitiesProvider.prototype.getChildren = function () {
-  return [createTreeAction('Download', 'cloud-download', 'inpaas.downloadEntity')];
+  return [
+    createTreeAction('New Entity', 'new-file', 'inpaas.createEntity'),
+    createTreeAction('Download Entity', 'cloud-download', 'inpaas.downloadEntity')
+  ];
 };
 
 DatabaseProvider.prototype.getTreeItem = function (item) {
@@ -433,7 +443,16 @@ StudioProvider.prototype.getTreeItem = function (item) {
 };
 
 StudioProvider.prototype.getChildren = function () {
-  return [createTreeAction('Open', 'window', 'inpaas.openStudio')];
+  return [
+    createTreeAction('New Application', 'new-file', 'inpaas.createApplication'),
+    createTreeAction('New Module', 'new-file', 'inpaas.createModule'),
+    createTreeAction('New Release', 'rocket', 'inpaas.openRelease'),
+    createTreeAction('Search', 'search', 'inpaas.openSearch'),
+    createTreeAction('Labels', 'tag', 'inpaas.openLabels'),
+    createTreeAction('Permissions', 'lock', 'inpaas.openPermissions'),
+    createTreeAction('Menus', 'list-tree', 'inpaas.openMenus'),
+    createTreeAction('Business Properties', 'symbol-property', 'inpaas.openBusinessProperties')
+  ];
 };
 
 FormsProvider.prototype.getTreeItem = function (item) {
@@ -442,8 +461,8 @@ FormsProvider.prototype.getTreeItem = function (item) {
 
 FormsProvider.prototype.getChildren = function () {
   return [
-    createTreeAction('New', 'new-file', 'inpaas.createForm'),
-    createTreeAction('Download', 'cloud-download', 'inpaas.downloadForm')
+    createTreeAction('New Form', 'new-file', 'inpaas.createForm'),
+    createTreeAction('Download Form', 'cloud-download', 'inpaas.downloadForm')
   ];
 };
 
@@ -453,8 +472,8 @@ SourcesProvider.prototype.getTreeItem = function (item) {
 
 SourcesProvider.prototype.getChildren = function () {
   return [
-    createTreeAction('New', 'new-file', 'inpaas.createSource'),
-    createTreeAction('Download', 'cloud-download', 'inpaas.downloadSource')
+    createTreeAction('New Source', 'new-file', 'inpaas.createSource'),
+    createTreeAction('Download Source', 'cloud-download', 'inpaas.downloadSource')
   ];
 };
 
@@ -564,17 +583,6 @@ function getEntityRelativeDirectory(workspaceFolder) {
   return configuredDirectory.replace(/^[\\/]+|[\\/]+$/g, '');
 }
 
-function getEntityNameFromFile(filePath) {
-  const content = fs.readFileSync(filePath, 'utf8');
-  const match = content.match(/<entity\b[^>]*\bname\s*=\s*["']([^"']+)["']/i);
-
-  if (!match) {
-    throw new Error('Não foi possível determinar o nome da entidade pelo XML.');
-  }
-
-  return match[1];
-}
-
 function resolveInpaasResource(uri) {
   if (!uri || uri.scheme !== 'file') {
     throw new Error('Selecione um arquivo de source, form ou entity no Explorer.');
@@ -630,11 +638,7 @@ function resolveInpaasResource(uri) {
     return part.toLowerCase() === 'forms-vue';
   });
 
-  if (
-    formsVueIndex >= 0 &&
-    parts.length === formsVueIndex + 3 &&
-    path.extname(parts[formsVueIndex + 2]).toLowerCase() === '.vue'
-  ) {
+  if (formsVueIndex >= 0 && parts.length > formsVueIndex + 1) {
     return {
       type: 'form',
       key: parts[formsVueIndex + 1],
@@ -653,17 +657,23 @@ function resolveInpaasResource(uri) {
   if (
     entityMatches &&
     parts.length === entityDirectory.length + 1 &&
-    path.extname(parts[parts.length - 1]).toLowerCase() === '.xml'
+    parts[parts.length - 1].toLowerCase().endsWith('.entity.json')
   ) {
     return {
       type: 'entity',
-      key: getEntityNameFromFile(uri.fsPath),
+      key: JSON.parse(fs.readFileSync(uri.fsPath, 'utf8')).name,
       uri: uri,
       workspaceFolder: workspaceFolder
     };
   }
 
-  throw new Error('Selecione um arquivo de source, form ou entity no Explorer.');
+  const modulesRoot = path.join(workspaceFolder.uri.fsPath, 'modules');
+  const moduleRelative = path.relative(modulesRoot, uri.fsPath).split(path.sep);
+  if (moduleRelative[0] && moduleRelative[0] !== '..' && moduleRelative.length <= 2) {
+    return { type: 'module', key: moduleRelative[0], uri: uri, workspaceFolder: workspaceFolder };
+  }
+
+  throw new Error('Selecione um recurso inPaaS no Explorer.');
 }
 
 async function copyResourceKey(uri) {
@@ -706,10 +716,7 @@ async function downloadOrUpdateResource(uri) {
       return downloadEntityForWorkspace(resource.workspaceFolder, resource.key);
     });
 
-    const entityDocument = await vscode.workspace.openTextDocument(
-      downloadedEntity.filePath
-    );
-    await vscode.window.showTextDocument(entityDocument, { preview: false });
+    await openEntityEditor(vscode.Uri.file(downloadedEntity.filePath));
     vscode.window.showInformationMessage(
       'inPaaS: entity ' + resource.key + ' atualizada.'
     );
@@ -743,7 +750,7 @@ async function publishResource(uri) {
   const resource = resolveInpaasResource(uri);
 
   if (resource.type === 'entity') {
-    throw new Error('A publicação manual de entities não é suportada.');
+    return publishEntity(uri);
   }
 
   for (const document of vscode.workspace.textDocuments) {
@@ -1168,6 +1175,65 @@ async function openDownloadedSource(downloaded) {
   await vscode.window.showTextDocument(document, { preview: false });
 }
 
+async function downloadSourceResource(uri) {
+  const resource = resolveInpaasResource(uri);
+  if (resource.type !== 'source') throw new Error('Selecione um source para baixar.');
+  return downloadOrUpdateResource(uri);
+}
+
+async function publishSourceResource(uri) {
+  const resource = resolveInpaasResource(uri);
+  if (resource.type !== 'source') throw new Error('Selecione um source para publicar.');
+  return publishResource(uri);
+}
+
+async function downloadFormResource(uri) {
+  const resource = resolveInpaasResource(uri);
+  if (resource.type !== 'form') throw new Error('Selecione um form para baixar.');
+  return downloadOrUpdateResource(uri);
+}
+
+async function publishFormResource(uri) {
+  const resource = resolveInpaasResource(uri);
+  if (resource.type !== 'form') throw new Error('Selecione um form para publicar.');
+  return publishResource(uri);
+}
+
+async function publishEntity(uri) {
+  const resource = resolveInpaasResource(uri);
+  if (resource.type !== 'entity') {
+    throw new Error('Selecione um arquivo .entity.json para publicar a entity.');
+  }
+
+  const document = vscode.workspace.textDocuments.find(function (item) {
+    return item.uri.toString() === resource.uri.toString();
+  });
+  if (document && document.isDirty) {
+    const saved = await document.save();
+    if (!saved) throw new Error('Não foi possível salvar o modelo da entity antes da publicação.');
+  }
+
+  const model = JSON.parse(fs.readFileSync(resource.uri.fsPath, 'utf8'));
+  const configuration = getWorkspaceConfiguration(resource.workspaceFolder);
+  const publishUrl = new URL(
+    '/api/vs-code/entities/publish',
+    String(configuration.get('serverUrl') || '').trim()
+  );
+  const result = await vscode.window.withProgress({
+    location: vscode.ProgressLocation.Notification,
+    title: 'inPaaS: publicando entity ' + resource.key,
+    cancellable: false
+  }, function () {
+    return requestJson(publishUrl, { method: 'POST', body: { model: model } });
+  });
+
+  vscode.window.showInformationMessage(
+    'inPaaS: entity ' + resource.key +
+    (result && result.created ? ' criada' : ' atualizada') +
+    ' nos metadados.'
+  );
+}
+
 function getSuggestedSourceName(key, prefix, type) {
   const suffix = key.indexOf(prefix) === 0
     ? key.slice(prefix.length)
@@ -1222,10 +1288,6 @@ async function createSource(context) {
       const normalized = value.trim();
 
       if (!normalized) return 'A chave do source é obrigatória.';
-      if (normalized === prefix) return 'Informe o segmento final da chave.';
-      if (normalized.indexOf(prefix) !== 0) {
-        return 'A chave deve começar com "' + prefix + '".';
-      }
       if (/\s/.test(normalized)) return 'A chave não pode conter espaços.';
 
       return null;
@@ -1348,8 +1410,17 @@ function getSuggestedV1FormName(key, prefix) {
   return suffix.slice(lastSeparator + 1);
 }
 
-async function createForm(context) {
-  const workspaceFolder = await selectWorkspaceFolder();
+async function createForm(context, targetUri) {
+  let workspaceFolder = null;
+  if (targetUri && targetUri.scheme === 'file') {
+    const directoryName = path.basename(targetUri.fsPath).toLowerCase();
+    if (directoryName !== 'forms' && directoryName !== 'forms-vue') {
+      throw new Error('Selecione a pasta forms ou forms-vue para criar um form.');
+    }
+    workspaceFolder = vscode.workspace.getWorkspaceFolder(targetUri);
+  } else {
+    workspaceFolder = await selectWorkspaceFolder();
+  }
 
   if (!workspaceFolder) return;
 
@@ -1371,10 +1442,6 @@ async function createForm(context) {
       const normalized = value.trim();
 
       if (!normalized) return 'A chave do form é obrigatória.';
-      if (normalized === prefix) return 'Informe o segmento final da chave.';
-      if (normalized.indexOf(prefix) !== 0) {
-        return 'A chave deve começar com "' + prefix + '".';
-      }
       if (/\s/.test(normalized)) return 'A chave não pode conter espaços.';
 
       return null;
@@ -1426,7 +1493,7 @@ async function createForm(context) {
     return downloadFormForWorkspace(workspaceFolder, normalizedKey);
   });
 
-  await openDownloadedForm(created);
+  await openFormEditorForKey(workspaceFolder, normalizedKey);
   writeOutput(
     'INFO',
     'Form v1 criado no módulo "' + module.key + '": ' + normalizedKey
@@ -1436,82 +1503,68 @@ async function createForm(context) {
   );
 }
 
-function getDownloadFileName(contentDisposition, entityName) {
-  const disposition = String(contentDisposition || '');
-  const encodedMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-  const plainMatch = disposition.match(/filename="([^"]+)"|filename=([^;]+)/i);
-  let fileName = encodedMatch
-    ? encodedMatch[1]
-    : plainMatch && (plainMatch[1] || plainMatch[2]);
-
-  if (fileName) {
-    try {
-      fileName = decodeURIComponent(fileName.trim());
-    } catch (_error) {
-      fileName = fileName.trim();
-    }
-  } else {
-    fileName = entityName + '.xml';
-  }
-
-  fileName = path.basename(fileName).replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
-
-  if (!fileName.toLowerCase().endsWith('.xml')) {
-    fileName += '.xml';
-  }
-
-  if (!fileName || fileName === '.xml') {
-    throw new Error('A API retornou um nome de arquivo inválido para a entidade.');
-  }
-
-  return fileName;
-}
-
 async function downloadEntityForWorkspace(workspaceFolder, name) {
   const configuration = getWorkspaceConfiguration(workspaceFolder);
-  const endpointTemplate = String(
-    configuration.get('entityDownloadPath') ||
-    '/api/entity-management/entities/{entityName}/xml'
+  const url = new URL(
+    '/api/vs-code/entities/' + encodeURIComponent(name),
+    configuration.get('serverUrl')
   );
-  const endpoint = endpointTemplate.replace(
-    '{entityName}',
-    encodeURIComponent(name)
-  );
-  const url = new URL(endpoint, configuration.get('serverUrl'));
 
   writeOutput(
     'INFO',
     'Baixando entity "' + name + '" em ' + workspaceFolder.uri.fsPath
   );
 
-  const downloaded = await requestText(url);
-
-  if (!downloaded.content.trim()) {
-    throw new Error('A API retornou um XML vazio para a entidade.');
-  }
-
-  const fileName = getDownloadFileName(
-    downloaded.headers['content-disposition'],
-    name
+  const downloaded = await requestJson(url);
+  if (!downloaded || !downloaded.name) throw new Error('A API retornou um modelo de entity inválido.');
+  const labelPrefix = 'label.' + String(downloaded.name).toLowerCase();
+  downloaded.labels = {};
+  const labelsUrl = new URL(
+    '/api/vs-code/entities/' + encodeURIComponent(downloaded.name) + '/labels',
+    configuration.get('serverUrl')
   );
+  const labelsResult = await requestJson(labelsUrl);
+  (labelsResult || []).forEach(function (row) {
+      const key = String(row.key || '').toLowerCase();
+      if (!key) return;
+      downloaded.labels[key] = { key: key, text: row.text || key, pending: false };
+  });
+  [labelPrefix].concat((downloaded.attributes || []).map(function (attribute) {
+    return labelPrefix + '.' + String(attribute.name || '').toLowerCase();
+  })).forEach(function (key) {
+    key = String(key).toLowerCase();
+    if (!downloaded.labels[key]) downloaded.labels[key] = { key: key, text: key, pending: false };
+  });
+  const fileName = String(downloaded.name).toLowerCase() + '.entity.json';
   const entitiesDirectory = getEntityRelativeDirectory(workspaceFolder);
   const relativePath = entitiesDirectory + '/' + fileName;
   const filePath = resolveDownloadedFile(workspaceFolder, relativePath);
 
   await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.promises.writeFile(filePath, downloaded.content, 'utf8');
+  await fs.promises.writeFile(filePath, JSON.stringify(downloaded, null, 2) + '\n', 'utf8');
 
   writeOutput('INFO', 'Entity "' + name + '" salva em ' + filePath);
 
   return { filePath: filePath, relativePath: relativePath };
 }
 
-async function downloadEntity() {
-  const workspaceFolder = await selectWorkspaceFolder();
+async function downloadEntity(uri) {
+  let workspaceFolder = null;
+  let localEntity = null;
+
+  if (uri && uri.scheme === 'file') {
+    localEntity = resolveInpaasResource(uri);
+    if (!localEntity || localEntity.type !== 'entity') {
+      throw new Error('Selecione um arquivo .entity.json dentro da pasta entities.');
+    }
+    workspaceFolder = localEntity.workspaceFolder;
+  } else {
+    workspaceFolder = await selectWorkspaceFolder();
+  }
 
   if (!workspaceFolder) return;
 
-  const entityName = await vscode.window.showInputBox({
+  const entityName = localEntity ? localEntity.key : await vscode.window.showInputBox({
     title: 'inPaaS: Baixar entity',
     prompt: 'Informe o nome da entidade',
     placeHolder: 'CRM_SM_POST_SCHED',
@@ -1535,12 +1588,159 @@ async function downloadEntity() {
   }, function () {
     return downloadEntityForWorkspace(workspaceFolder, name);
   });
-  const document = await vscode.workspace.openTextDocument(downloaded.filePath);
-  await vscode.window.showTextDocument(document, { preview: false });
+  await openEntityEditor(vscode.Uri.file(downloaded.filePath));
 
   vscode.window.showInformationMessage(
     'inPaaS: entity ' + name + ' baixada em ' + downloaded.relativePath + '.'
   );
+}
+
+async function createEntity(context, targetUri) {
+  let workspaceFolder = null;
+  if (targetUri && targetUri.scheme === 'file') {
+    const directoryName = path.basename(targetUri.fsPath).toLowerCase();
+    if (directoryName !== 'entities') {
+      throw new Error('Selecione a pasta entities para criar uma entity neste local.');
+    }
+    workspaceFolder = vscode.workspace.getWorkspaceFolder(targetUri);
+  } else {
+    workspaceFolder = await selectWorkspaceFolder();
+  }
+  if (!workspaceFolder) return;
+  const module = getSelectedModule(context, workspaceFolder);
+  if (!module) throw new Error('Selecione o módulo ativo antes de criar uma entity.');
+  const value = await vscode.window.showInputBox({
+    title: 'inPaaS: Nova Entity', prompt: 'Informe o nome da entity', ignoreFocusOut: true,
+    validateInput: function (input) {
+      const name = String(input || '').trim();
+      if (!name) return 'O nome da entity é obrigatório.';
+      if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) return 'Use letras, números e underscore; o nome deve começar por letra.';
+      return null;
+    }
+  });
+  if (value === undefined) return;
+  const name = value.trim().toUpperCase();
+  const configuration = getWorkspaceConfiguration(workspaceFolder);
+  const filePath = resolveDownloadedFile(workspaceFolder, getEntityRelativeDirectory(workspaceFolder) + '/' + name.toLowerCase() + '.entity.json');
+  if (fs.existsSync(filePath)) throw new Error('Já existe uma entity local com esse nome.');
+  try {
+    await requestJson(new URL('/api/vs-code/entities/' + encodeURIComponent(name), configuration.get('serverUrl')));
+    throw new Error('A entity ' + name + ' já existe no servidor.');
+  } catch (error) {
+    if (!/Entity não encontrada|não está disponível|HTTP 404/i.test(String(error.message || error))) throw error;
+  }
+  const primaryKey = 'ID_' + name;
+  const labelPrefix = 'label.' + name.toLowerCase();
+  const model = {
+    name: name, alias: name, text: null, module: module.id, permissionKey: null,
+    ownership: false, defaultOwnership: null, changeTracking: false, formType: null,
+    formKey: null, findersFixed: false, audit: { onInsert: false, onUpdate: false, onDelete: false },
+    primaryKey: 'XPK_' + name, references: [], indexes: [], queries: [], triggers: [], finders: [], forms: [],
+    attributes: [{ name: primaryKey, type: 'Long', alias: 'id', required: true, searchable: false, primaryKey: true, moduleId: module.id, audit: true, title: 'Código' }],
+    labels: {}
+  };
+  model.labels[labelPrefix] = { key: labelPrefix, text: labelPrefix, pending: false };
+  model.labels[labelPrefix + '.' + primaryKey.toLowerCase()] = { key: labelPrefix + '.' + primaryKey.toLowerCase(), text: 'Código', pending: true };
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.promises.writeFile(filePath, JSON.stringify(model, null, 2) + '\n', 'utf8');
+  await openEntityEditor(vscode.Uri.file(filePath));
+}
+
+async function openEntityEditor(uri) {
+  let file = uri;
+  if (!file && vscode.window.activeTextEditor && /\.entity\.json$/i.test(vscode.window.activeTextEditor.document.fileName)) file = vscode.window.activeTextEditor.document.uri;
+  if (!file) {
+    const picked = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      filters: { 'Entity model': ['json'] },
+      title: 'Selecione uma entity local já baixada'
+    });
+    file = picked && picked[0];
+  }
+  if (!file) return;
+  const openDocument = vscode.workspace.textDocuments.find(function (document) {
+    return document.uri.toString() === file.toString();
+  });
+  if (openDocument && openDocument.isDirty) {
+    throw new Error('Salve o modelo da entity antes de abri-lo no editor visual.');
+  }
+  const content = fs.readFileSync(file.fsPath, 'utf8');
+  const model = JSON.parse(content);
+  const entityName = model.name;
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(file);
+  if (!workspaceFolder) throw new Error('A entity precisa estar dentro de um workspace.');
+  const configuration = getWorkspaceConfiguration(workspaceFolder);
+  const formUrl = new URL('/forms/inpaas.devstudio.entity-vs-code.main', String(configuration.get('serverUrl') || '').trim());
+  formUrl.searchParams.set('inpaas-vscode-entity', '1');
+  const selectedModule = moduleContextProvider && getSelectedModule(moduleContextProvider.context, workspaceFolder);
+  const key = file.toString();
+  const opened = entityEditorPanels.get(key);
+  if (opened) { opened.reveal(); return; }
+  const panel = vscode.window.createWebviewPanel('inpaasEntityEditor', 'Entity: ' + entityName, vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
+  entityEditorPanels.set(key, panel);
+  const nonce = createNonce();
+  const bridgeData = JSON.stringify({ model: model, module: selectedModule ? selectedModule.id : null }).replace(/</g, '\\u003c');
+  panel.webview.html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src ' + escapeHtml(formUrl.origin) + '; style-src \'unsafe-inline\'; script-src \'nonce-' + nonce + '\';"><style>html,body,iframe{width:100%;height:100%;margin:0;padding:0;box-sizing:border-box;display:block;border:0;overflow:hidden;background:var(--vscode-editor-background)}</style></head><body><iframe id="editor" src="' + escapeHtml(formUrl.toString()) + '"></iframe><script nonce="' + nonce + '">const vscode=acquireVsCodeApi(),payload=' + bridgeData + ',origin=' + JSON.stringify(formUrl.origin) + ',frame=document.getElementById("editor");function send(){frame.contentWindow.postMessage({type:"inpaas-entity-editor-load",payload:payload},origin)}frame.addEventListener("load",send);window.addEventListener("message",function(event){if(event.data&&event.data.command==="publishResult"){frame.contentWindow.postMessage({type:"inpaas-entity-editor-publish-result",error:event.data.error||null},origin);return}if(event.origin!==origin||!event.data)return;if(event.data.type==="inpaas-entity-editor-ready")send();if(event.data.type==="inpaas-entity-editor-save-model")vscode.postMessage({command:"saveEntityModel",model:event.data.model});if(event.data.type==="inpaas-entity-editor-publish-model")vscode.postMessage({command:"publishEntityModel",model:event.data.model})});</script></body></html>';
+  panel.webview.onDidReceiveMessage(async function (message) {
+    if (message.command === 'saveEntityModel') {
+      try { fs.writeFileSync(file.fsPath, JSON.stringify(message.model || {}, null, 2) + '\n', 'utf8'); vscode.window.showInformationMessage('inPaaS: modelo da entity salvo localmente.'); }
+      catch (error) { reportError('Falha ao salvar modelo da entity', error); }
+      return;
+    }
+    if (message.command === 'publishEntityModel') {
+      try {
+        const entityModel = message.model || {};
+        fs.writeFileSync(file.fsPath, JSON.stringify(entityModel, null, 2) + '\n', 'utf8');
+        const publishUrl = new URL('/api/vs-code/entities/publish', String(configuration.get('serverUrl') || '').trim());
+        const result = await requestJson(publishUrl, { method: 'POST', body: { model: entityModel } });
+        panel.webview.postMessage({ command: 'publishResult' });
+        vscode.window.showInformationMessage('inPaaS: entity ' + entityModel.name + (result.created ? ' criada' : ' atualizada') + ' nos metadados.');
+      } catch (error) {
+        panel.webview.postMessage({ command: 'publishResult', error: error.message || String(error) });
+        reportError('Falha ao publicar entity', error);
+      }
+    }
+  });
+  panel.onDidDispose(function () { entityEditorPanels.delete(key); });
+}
+
+async function openFormEditorForKey(workspaceFolder, formKey) {
+  const configuration = getWorkspaceConfiguration(workspaceFolder);
+  const formUrl = new URL('/forms/inpaas.devstudio.form-vs-code.main', String(configuration.get('serverUrl') || '').trim());
+  formUrl.searchParams.set('inpaas-vscode-form', '1');
+  formUrl.searchParams.set('key', formKey);
+  const panel = vscode.window.createWebviewPanel('inpaasFormEditor', 'Form: ' + formKey, vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
+  const nonce = createNonce();
+  panel.webview.html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src ' + escapeHtml(formUrl.origin) + '; style-src \'unsafe-inline\'; script-src \'nonce-' + nonce + '\';"><style>html,body,iframe{width:100%;height:100%;margin:0;padding:0;box-sizing:border-box;display:block;border:0;overflow:hidden;background:var(--vscode-editor-background)}</style></head><body><iframe id="editor" src="' + escapeHtml(formUrl.toString()) + '"></iframe><script nonce="' + nonce + '">const f=document.getElementById("editor"),o=' + JSON.stringify(formUrl.origin) + ';function s(){f.contentWindow.postMessage({type:"inpaas-form-editor-load",payload:{key:' + JSON.stringify(formKey) + '}},o)}f.addEventListener("load",s);window.addEventListener("message",e=>{if(e.origin===o&&e.data&&e.data.type==="inpaas-form-editor-ready")s()});</script></body></html>';
+}
+
+async function openFormEditor(uri) {
+  const resource = resolveInpaasResource(uri);
+  if (resource.type !== 'form') throw new Error('Selecione um form para abrir o editor.');
+  return openFormEditorForKey(resource.workspaceFolder, resource.key);
+}
+
+async function openSourceEditorForKey(workspaceFolder, sourceKey) {
+  const panelKey = workspaceFolder.uri.toString() + ':' + sourceKey;
+  const opened = sourceEditorPanels.get(panelKey);
+  if (opened) {
+    opened.reveal(opened.viewColumn, false);
+    return;
+  }
+  const configuration = getWorkspaceConfiguration(workspaceFolder);
+  const formUrl = new URL('/forms/inpaas.devstudio.source-vs-code.main', String(configuration.get('serverUrl') || '').trim());
+  formUrl.searchParams.set('key', sourceKey);
+  const panel = vscode.window.createWebviewPanel('inpaasSourceEditor', 'Source: ' + sourceKey, vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
+  sourceEditorPanels.set(panelKey, panel);
+  const nonce = createNonce();
+  panel.webview.html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src ' + escapeHtml(formUrl.origin) + '; style-src \'unsafe-inline\'; script-src \'nonce-' + nonce + '\';"><style>html,body,iframe{width:100%;height:100%;margin:0;padding:0;box-sizing:border-box;display:block;border:0;overflow:hidden;background:var(--vscode-editor-background)}</style></head><body><iframe src="' + escapeHtml(formUrl.toString()) + '"></iframe></body></html>';
+  panel.onDidDispose(function () { sourceEditorPanels.delete(panelKey); });
+}
+
+async function openSourceEditor(uri) {
+  const resource = resolveInpaasResource(uri);
+  if (resource.type !== 'source') throw new Error('Selecione um source para abrir o editor.');
+  return openSourceEditorForKey(resource.workspaceFolder, resource.key);
 }
 
 function escapeHtml(value) {
@@ -1615,6 +1815,267 @@ async function openStudio(context) {
   studioPanel.onDidDispose(function () {
     studioPanel = null;
   }, null, context.subscriptions);
+}
+
+async function openSearch() {
+  const workspaceFolder = await selectWorkspaceFolder();
+
+  if (!workspaceFolder) return;
+
+  if (searchPanel) {
+    searchPanel.reveal(searchPanel.viewColumn, false);
+    return;
+  }
+
+  const configuration = getWorkspaceConfiguration(workspaceFolder);
+  const serverUrl = String(configuration.get('serverUrl') || '').trim();
+
+  if (!serverUrl) {
+    throw new Error('Configure inpaas.serverUrl antes de abrir a busca.');
+  }
+
+  const searchUrl = new URL('/forms/inpaas.devstudio.search-vs-code.main', serverUrl);
+  const frameOrigin = searchUrl.origin;
+
+  searchPanel = vscode.window.createWebviewPanel(
+    'inpaasSearch',
+    'inPaaS Search',
+    vscode.ViewColumn.Active,
+    { enableScripts: true, retainContextWhenHidden: true }
+  );
+
+  const nonce = createNonce();
+  searchPanel.webview.html = '<!DOCTYPE html>' +
+    '<html lang="pt-BR"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+    '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; ' +
+    'frame-src ' + escapeHtml(frameOrigin) + '; style-src \'unsafe-inline\'; script-src \'nonce-' + nonce + '\';">' +
+    '<style>html,body,iframe{width:100%;height:100%;margin:0;padding:0;box-sizing:border-box;display:block;border:0;overflow:hidden;background:var(--vscode-editor-background)}</style>' +
+    '</head><body><iframe title="inPaaS Search" src="' +
+    escapeHtml(searchUrl.toString()) + '"></iframe><script nonce="' + nonce + '">const vscode=acquireVsCodeApi(),origin=' + JSON.stringify(frameOrigin) + ';window.addEventListener("message",function(event){if(event.origin!==origin||!event.data||event.data.type!=="inpaas-search-open-resource")return;vscode.postMessage({command:"openSearchResource",resourceType:event.data.resourceType,key:event.data.key});});</script></body></html>';
+
+  searchPanel.webview.onDidReceiveMessage(async function (message) {
+    if (!message || message.command !== 'openSearchResource') return;
+    try {
+      await openSearchResource(workspaceFolder, message.resourceType, message.key);
+    } catch (error) {
+      reportError('Falha ao abrir recurso da busca', error);
+    }
+  });
+
+  searchPanel.onDidDispose(function () {
+    searchPanel = null;
+  });
+}
+
+async function createApplication(context) {
+  const workspaceFolder = await selectWorkspaceFolder();
+  if (!workspaceFolder) return;
+  const key = await vscode.window.showInputBox({ title: 'inPaaS: New Application', prompt: 'Application key', ignoreFocusOut: true, validateInput: function (value) { const text = String(value || '').trim(); if (!text) return 'A key é obrigatória.'; if (/\s/.test(text)) return 'A key não pode conter espaços.'; return null; } });
+  if (key === undefined) return;
+  const name = await vscode.window.showInputBox({ title: 'inPaaS: New Application', prompt: 'Application name', ignoreFocusOut: true, validateInput: function (value) { return String(value || '').trim() ? null : 'O nome é obrigatório.'; } });
+  if (name === undefined) return;
+  const serverUrl = String(getWorkspaceConfiguration(workspaceFolder).get('serverUrl') || '').trim();
+  const result = await requestJson(new URL('/api/studio/apps', serverUrl), { method: 'POST', body: { key: key.trim(), name: name.trim(), icon: 'fa fa-cubes' } });
+  const application = result && result.data ? result.data : result;
+  const mainModule = application && application.modules && application.modules[0];
+  if (mainModule && mainModule.id !== undefined) {
+    await setSelectedModule(context, workspaceFolder, {
+      id: mainModule.id,
+      key: mainModule.key,
+      title: mainModule.title || mainModule.key,
+      appTitle: application.name || name.trim()
+    });
+  }
+  vscode.window.showInformationMessage('inPaaS: aplicação ' + (result.name || name.trim()) + ' criada.');
+}
+
+async function createModule(context) {
+  const workspaceFolder = await selectWorkspaceFolder(); if (!workspaceFolder) return;
+  const serverUrl = String(getWorkspaceConfiguration(workspaceFolder).get('serverUrl') || '').trim();
+  const apps = await requestJson(new URL('/api/studio/apps', serverUrl));
+  const selectedModule = getSelectedModule(context, workspaceFolder);
+  const selectedApp = (apps || []).filter(function (app) { return (app.modules || []).some(function (module) { return selectedModule && String(module.id) === String(selectedModule.id); }); })[0];
+  const orderedApps = (apps || []).slice().sort(function (first, second) { return first === selectedApp ? -1 : second === selectedApp ? 1 : 0; });
+  const choice = await vscode.window.showQuickPick(orderedApps.map(function (app) { return { label: app.title || app.name || app.key, description: app.key, app: app }; }), { title: 'inPaaS: New Module', placeHolder: 'Select application', ignoreFocusOut: true });
+  if (!choice) return;
+  const prefix = String(choice.app.key || '') + '.';
+  const key = await vscode.window.showInputBox({ title: 'inPaaS: New Module', prompt: 'Module key', value: prefix, ignoreFocusOut: true, validateInput: function (value) { const text = String(value || '').trim(); if (!text) return 'A key é obrigatória.'; if (/\s/.test(text)) return 'A key não pode conter espaços.'; return null; } });
+  if (key === undefined) return;
+  const name = await vscode.window.showInputBox({ title: 'inPaaS: New Module', prompt: 'Module name', value: key.trim().slice(key.trim().lastIndexOf('.') + 1), ignoreFocusOut: true, validateInput: function (value) { return String(value || '').trim() ? null : 'O nome é obrigatório.'; } });
+  if (name === undefined) return;
+  const result = await requestJson(new URL('/api/studio/modules', serverUrl), { method: 'POST', body: { application: choice.app.id, key: key.trim(), name: name.trim(), icon: 'fa fa-cube' } });
+  const module = result && result.data ? result.data : result;
+  if (module && module.id !== undefined) await setSelectedModule(context, workspaceFolder, { id: module.id, key: module.key, title: module.title || name.trim(), appTitle: choice.label });
+  vscode.window.showInformationMessage('inPaaS: módulo ' + name.trim() + ' criado.');
+}
+
+async function openRelease(context) {
+  const workspaceFolder = await selectWorkspaceFolder();
+  if (!workspaceFolder) return;
+  const serverUrl = String(getWorkspaceConfiguration(workspaceFolder).get('serverUrl') || '').trim();
+  const formUrl = new URL('/forms/inpaas.devstudio.release-vs-code.main', serverUrl);
+  const panel = vscode.window.createWebviewPanel('inpaasRelease', 'New Release', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
+  panel.webview.html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src ' + escapeHtml(formUrl.origin) + '; style-src \'unsafe-inline\';"><style>html,body,iframe{width:100%;height:100%;margin:0;padding:0;box-sizing:border-box;display:block;border:0;overflow:hidden;background:var(--vscode-editor-background)}</style></head><body><iframe src="' + escapeHtml(formUrl.toString()) + '"></iframe></body></html>';
+}
+
+async function openLabels(context) {
+  const workspaceFolder = await selectWorkspaceFolder();
+  if (!workspaceFolder) return;
+  const module = getSelectedModule(context, workspaceFolder);
+  if (!module) throw new Error('Selecione o módulo ativo antes de abrir as labels.');
+  if (labelsPanel && labelsPanel.moduleId === module.id) {
+    labelsPanel.panel.reveal(labelsPanel.panel.viewColumn, false);
+    return;
+  }
+  if (labelsPanel) labelsPanel.panel.dispose();
+
+  const configuration = getWorkspaceConfiguration(workspaceFolder);
+  const formUrl = new URL('/forms/inpaas.devstudio.label-vs-code.main', String(configuration.get('serverUrl') || '').trim());
+  formUrl.searchParams.set('moduleId', String(module.id));
+  formUrl.searchParams.set('moduleTitle', module.title);
+  const panel = vscode.window.createWebviewPanel('inpaasLabels', 'Labels: ' + module.title, vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
+  labelsPanel = { panel: panel, moduleId: module.id };
+  const nonce = createNonce();
+  panel.webview.html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src ' + escapeHtml(formUrl.origin) + '; style-src \'unsafe-inline\'; script-src \'nonce-' + nonce + '\';"><style>html,body,iframe{width:100%;height:100%;margin:0;padding:0;box-sizing:border-box;display:block;border:0;overflow:hidden;background:var(--vscode-editor-background)}</style></head><body><iframe src="' + escapeHtml(formUrl.toString()) + '"></iframe></body></html>';
+  panel.onDidDispose(function () {
+    if (labelsPanel && labelsPanel.panel === panel) labelsPanel = null;
+  });
+}
+
+async function openPermissions(context) {
+  const workspaceFolder = await selectWorkspaceFolder();
+  if (!workspaceFolder) return;
+  const module = getSelectedModule(context, workspaceFolder);
+  if (!module) throw new Error('Selecione o módulo ativo antes de abrir as permissões.');
+  if (permissionsPanel && permissionsPanel.moduleId === module.id) {
+    permissionsPanel.panel.reveal(permissionsPanel.panel.viewColumn, false);
+    return;
+  }
+  if (permissionsPanel) permissionsPanel.panel.dispose();
+
+  const configuration = getWorkspaceConfiguration(workspaceFolder);
+  const formUrl = new URL('/forms/inpaas.devstudio.permission-vs-code.main', String(configuration.get('serverUrl') || '').trim());
+  formUrl.searchParams.set('moduleId', String(module.id));
+  formUrl.searchParams.set('moduleTitle', module.title);
+  const panel = vscode.window.createWebviewPanel('inpaasPermissions', 'Permissions: ' + module.title, vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
+  permissionsPanel = { panel: panel, moduleId: module.id };
+  const nonce = createNonce();
+  panel.webview.html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src ' + escapeHtml(formUrl.origin) + '; style-src \'unsafe-inline\'; script-src \'nonce-' + nonce + '\';"><style>html,body,iframe{width:100%;height:100%;margin:0;padding:0;box-sizing:border-box;display:block;border:0;overflow:hidden;background:var(--vscode-editor-background)}</style></head><body><iframe src="' + escapeHtml(formUrl.toString()) + '"></iframe></body></html>';
+  panel.onDidDispose(function () {
+    if (permissionsPanel && permissionsPanel.panel === panel) permissionsPanel = null;
+  });
+}
+
+async function openMenus() {
+  const workspaceFolder = await selectWorkspaceFolder();
+  if (!workspaceFolder) return;
+  if (menusPanel) { menusPanel.reveal(menusPanel.viewColumn, false); return; }
+  const configuration = getWorkspaceConfiguration(workspaceFolder);
+  const formUrl = new URL('/forms/inpaas.devstudio.menu-vs-code.main', String(configuration.get('serverUrl') || '').trim());
+  const panel = vscode.window.createWebviewPanel('inpaasMenus', 'Menus', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
+  menusPanel = panel;
+  panel.webview.html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src ' + escapeHtml(formUrl.origin) + '; style-src \'unsafe-inline\';"><style>html,body,iframe{width:100%;height:100%;margin:0;padding:0;box-sizing:border-box;display:block;border:0;overflow:hidden;background:var(--vscode-editor-background)}</style></head><body><iframe src="' + escapeHtml(formUrl.toString()) + '"></iframe></body></html>';
+  panel.onDidDispose(function () { if (menusPanel === panel) menusPanel = null; });
+}
+
+async function openBusinessProperties(context) {
+  const workspaceFolder = await selectWorkspaceFolder(); if (!workspaceFolder) return;
+  const module = getSelectedModule(context, workspaceFolder); if (!module) throw new Error('Selecione o módulo ativo antes de abrir Business Properties.');
+  if (businessPropertiesPanel && businessPropertiesPanel.moduleId === module.id) { businessPropertiesPanel.panel.reveal(businessPropertiesPanel.panel.viewColumn, false); return; }
+  if (businessPropertiesPanel) businessPropertiesPanel.panel.dispose();
+  const serverUrl = String(getWorkspaceConfiguration(workspaceFolder).get('serverUrl') || '').trim();
+  const formUrl = new URL('/forms/inpaas.devstudio.bsprop-vs-code.main', serverUrl); formUrl.searchParams.set('moduleId', String(module.id)); formUrl.searchParams.set('moduleTitle', module.title);
+  const panel = vscode.window.createWebviewPanel('inpaasBusinessProperties', 'Business Properties: ' + module.title, vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
+  businessPropertiesPanel = { panel: panel, moduleId: module.id };
+  panel.webview.html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src ' + escapeHtml(formUrl.origin) + '; style-src \'unsafe-inline\';"><style>html,body,iframe{width:100%;height:100%;margin:0;padding:0;display:block;border:0;overflow:hidden;background:var(--vscode-editor-background)}</style></head><body><iframe src="' + escapeHtml(formUrl.toString()) + '"></iframe></body></html>';
+  panel.onDidDispose(function () { if (businessPropertiesPanel && businessPropertiesPanel.panel === panel) businessPropertiesPanel = null; });
+}
+
+async function openModuleSettings(context, uri) {
+  const workspaceFolder = uri ? vscode.workspace.getWorkspaceFolder(uri) : await selectWorkspaceFolder(); if (!workspaceFolder) return;
+  let module = getSelectedModule(context, workspaceFolder);
+  if (uri) { const relative = path.relative(path.join(workspaceFolder.uri.fsPath, 'modules'), uri.fsPath).split(path.sep); if (relative[0] && relative[0] !== '..') module = (await listStudioModules(workspaceFolder)).filter(function (item) { return item.key === relative[0]; })[0] || module; }
+  if (!module) throw new Error('Selecione o módulo ativo antes de abrir Settings.');
+  const serverUrl = String(getWorkspaceConfiguration(workspaceFolder).get('serverUrl') || '').trim();
+  const formUrl = new URL('/forms/inpaas.devstudio.module-vs-code.main', serverUrl); formUrl.searchParams.set('moduleId', String(module.id));
+  const panel = vscode.window.createWebviewPanel('inpaasModuleSettings', 'Settings: ' + module.title, vscode.ViewColumn.Active, { enableScripts: true });
+  panel.webview.html = '<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src ' + escapeHtml(formUrl.origin) + '; style-src \'unsafe-inline\';"><style>html,body,iframe{width:100%;height:100%;margin:0;padding:0;box-sizing:border-box;display:block;border:0;overflow:hidden;background:var(--vscode-editor-background)}</style></head><body><iframe src="' + escapeHtml(formUrl.toString()) + '"></iframe></body></html>';
+}
+
+async function downloadModule(context, uri) {
+  const workspaceFolder = uri ? vscode.workspace.getWorkspaceFolder(uri) : await selectWorkspaceFolder();
+  if (!workspaceFolder) return;
+  let module = getSelectedModule(context, workspaceFolder);
+  const modulesRoot = path.join(workspaceFolder.uri.fsPath, 'modules');
+  if (uri) {
+    const relative = path.relative(modulesRoot, uri.fsPath).split(path.sep);
+    if (relative[0] && relative[0] !== '..') {
+      const modules = await listStudioModules(workspaceFolder);
+      module = modules.filter(function (item) { return item.key === relative[0]; })[0] || module;
+    }
+  }
+  if (!module) throw new Error('Selecione o módulo ativo antes de baixar o módulo.');
+  const serverUrl = String(getWorkspaceConfiguration(workspaceFolder).get('serverUrl') || '').trim();
+  const settings = await requestJson(new URL('/api/studio/modules/' + encodeURIComponent(module.id) + '/settings', serverUrl));
+  const directory = path.join(modulesRoot, module.key);
+  await fs.promises.mkdir(directory, { recursive: true });
+  await fs.promises.writeFile(path.join(directory, 'styles.css'), settings.css || '', 'utf8');
+  await fs.promises.writeFile(path.join(directory, 'script.js'), settings.js || '', 'utf8');
+  const styleDocument = await vscode.workspace.openTextDocument(path.join(directory, 'styles.css'));
+  const scriptDocument = await vscode.workspace.openTextDocument(path.join(directory, 'script.js'));
+  await vscode.window.showTextDocument(styleDocument, { preview: false });
+  await vscode.window.showTextDocument(scriptDocument, { preview: true, preserveFocus: true });
+  vscode.window.showInformationMessage('inPaaS: módulo ' + module.key + ' baixado.');
+}
+
+async function publishModuleFile(context, document) {
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+  if (!workspaceFolder || document.uri.scheme !== 'file') return;
+  const modulesRoot = path.join(workspaceFolder.uri.fsPath, 'modules');
+  const relative = path.relative(modulesRoot, document.uri.fsPath).split(path.sep);
+  if (relative.length !== 2 || (relative[1] !== 'styles.css' && relative[1] !== 'script.js')) return;
+  const modules = await listStudioModules(workspaceFolder);
+  const module = modules.filter(function (item) { return item.key === relative[0]; })[0];
+  if (!module) return;
+  const serverUrl = String(getWorkspaceConfiguration(workspaceFolder).get('serverUrl') || '').trim();
+  const settingsUrl = new URL('/api/studio/modules/' + encodeURIComponent(module.id) + '/settings', serverUrl);
+  const settings = await requestJson(settingsUrl);
+  settings.css = await fs.promises.readFile(path.join(modulesRoot, module.key, 'styles.css'), 'utf8');
+  settings.js = await fs.promises.readFile(path.join(modulesRoot, module.key, 'script.js'), 'utf8');
+  await requestJson(settingsUrl, { method: 'PUT', body: settings });
+  writeOutput('INFO', 'Módulo publicado: ' + module.key);
+}
+
+async function openSearchResource(workspaceFolder, resourceType, key) {
+  const normalizedKey = String(key || '').trim();
+  if (!normalizedKey) throw new Error('A busca não retornou uma chave válida para o recurso.');
+
+  if (resourceType === 'source') {
+    const downloadedSource = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'inPaaS: baixando source ' + normalizedKey, cancellable: false }, function () {
+      return downloadSourceForWorkspace(workspaceFolder, normalizedKey);
+    });
+    await openDownloadedSource(downloadedSource);
+    return;
+  }
+
+  if (resourceType === 'entity') {
+    const downloadedEntity = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'inPaaS: baixando entity ' + normalizedKey, cancellable: false }, function () {
+      return downloadEntityForWorkspace(workspaceFolder, normalizedKey);
+    });
+    await openEntityEditor(vscode.Uri.file(downloadedEntity.filePath));
+    return;
+  }
+
+  if (['form-html', 'form-js', 'form-css'].indexOf(resourceType) >= 0) {
+    const downloadedForm = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'inPaaS: baixando form ' + normalizedKey, cancellable: false }, function () {
+      return downloadFormForWorkspace(workspaceFolder, normalizedKey);
+    });
+    await openDownloadedForm(downloadedForm);
+    return;
+  }
+
+  throw new Error('Tipo de recurso não suportado pela busca: ' + resourceType + '.');
 }
 
 function normalizeQueryResult(result, page, limit) {
@@ -2201,10 +2662,25 @@ function activate(context) {
     })
   );
 
+  context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(function (document) {
+    publishModuleFile(context, document).catch(function (error) {
+      reportError('Falha ao publicar módulo', error);
+    });
+  }));
+
   const disposables = [
     registerCommand(context, 'inpaas.downloadSource', downloadSource),
     registerCommand(context, 'inpaas.downloadForm', downloadForm),
     registerCommand(context, 'inpaas.downloadEntity', downloadEntity),
+    registerCommand(context, 'inpaas.createEntity', function (uri) { return createEntity(context, uri); }),
+    registerCommand(context, 'inpaas.openEntityEditor', openEntityEditor),
+    registerCommand(context, 'inpaas.openFormEditor', openFormEditor),
+    registerCommand(context, 'inpaas.openSourceEditor', openSourceEditor),
+    registerCommand(context, 'inpaas.publishEntity', publishEntity),
+    registerCommand(context, 'inpaas.downloadSourceResource', downloadSourceResource),
+    registerCommand(context, 'inpaas.publishSourceResource', publishSourceResource),
+    registerCommand(context, 'inpaas.downloadFormResource', downloadFormResource),
+    registerCommand(context, 'inpaas.publishFormResource', publishFormResource),
     registerCommand(context, 'inpaas.copyKey', copyResourceKey),
     registerCommand(context, 'inpaas.downloadOrUpdateResource', downloadOrUpdateResource),
     registerCommand(context, 'inpaas.publishResource', publishResource),
@@ -2217,11 +2693,25 @@ function activate(context) {
     registerCommand(context, 'inpaas.openStudio', function () {
       return openStudio(context);
     }),
+    registerCommand(context, 'inpaas.openSearch', openSearch),
+    registerCommand(context, 'inpaas.createApplication', function () { return createApplication(context); }),
+    registerCommand(context, 'inpaas.createModule', function () { return createModule(context); }),
+    registerCommand(context, 'inpaas.openRelease', function () { return openRelease(context); }),
+    registerCommand(context, 'inpaas.openLabels', function () {
+      return openLabels(context);
+    }),
+    registerCommand(context, 'inpaas.openPermissions', function () {
+      return openPermissions(context);
+    }),
+    registerCommand(context, 'inpaas.openMenus', openMenus),
+    registerCommand(context, 'inpaas.openBusinessProperties', function () { return openBusinessProperties(context); }),
+    registerCommand(context, 'inpaas.openModuleSettings', function (uri) { return openModuleSettings(context, uri); }),
+    registerCommand(context, 'inpaas.downloadModule', function (uri) { return downloadModule(context, uri); }),
     registerCommand(context, 'inpaas.selectModule', function () {
       return selectModule(context);
     }),
-    registerCommand(context, 'inpaas.createForm', function () {
-      return createForm(context);
+    registerCommand(context, 'inpaas.createForm', function (uri) {
+      return createForm(context, uri);
     }),
     registerCommand(context, 'inpaas.createSource', function () {
       return createSource(context);

@@ -56,13 +56,26 @@ Labels de campos devem ser associadas ao módulo indicado pelo usuário. Não
 inferir o módulo quando ele não estiver inequívoco; solicitar o módulo ou um
 exemplo existente.
 
+### Entity JSON e o editor local
+
+O modelo JSON local da entity descreve sua estrutura, mas não deve ser tratado
+como fonte completa dos textos traduzidos da entity e de seus campos. Esses
+textos pertencem ao cadastro global de labels.
+
+No editor local, usar a estrutura JSON da entity para identificar o campo e
+derivar a chave pela convenção acima. Para exibir textos já existentes,
+consultar `CORE_LABEL` globalmente por `DS_KEY` e usar o texto-base ou a
+tradução do locale atual. Para uma label nova ou alterada, manter a alteração
+pendente no artefato local e publicá-la somente pelo comando manual de
+publicação da entity; salvar o JSON não deve criar ou atualizar labels.
+
 ## Contexto de módulo no VS Code
 
-Nos fluxos de labels executados pela extensão inPaaS, é obrigatório haver um
-módulo ativo selecionado na Activity Bar. Usar o campo `id` dessa seleção como
-`moduleId` em todas as rotas e payloads de labels; não usar a chave textual ou
-o título do módulo como substituto. Se não houver módulo selecionado, a ação
-deve ser bloqueada e orientar o usuário a selecioná-lo antes de continuar.
+`CORE_LABEL.DS_KEY` é global e único. A seleção de módulo não participa da
+leitura de labels no editor local. Ela é necessária somente na publicação
+manual, para criar ou preservar a associação de deploy em `CORE_MODULELABEL`.
+Quando a API do Studio exigir `moduleId` na rota de consulta, a busca por
+`search` continua global e não deve ser interpretada como filtro de módulo.
 
 ## Idiomas
 
