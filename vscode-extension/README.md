@@ -42,7 +42,7 @@ ambos existem, os dois são baixados, mantidos localmente e enviados no payload
 de publicação.
 
 O contrato detalhado do XML e da reconstrução de campos e filtros está em
-[`docs/form-design.md`](../docs/form-design.md).
+[`form-design.md` na base de conhecimento](https://github.com/ThiagoMZan/inpaas-ai-knowledge/blob/main/docs/form-design.md).
 
 Um form Vue continua sendo um registro de form, mas possui representação local
 SFC. Ele fica em `forms-vue/{key}/{DS_FORMULARIO}.vue`. A pasta preserva a
@@ -226,7 +226,8 @@ var src = require('plusoftcrm.libs.main.source');
 A extensão procura primeiro um arquivo cujo nome, desconsiderando `.js`,
 `.css` ou `.html`, seja igual à chave. Se não encontrar, baixa o source
 automaticamente e navega para o arquivo criado. A chave do `require()` deve
-permanecer sem extensão.
+permanecer sem extensão, exceto quando o sufixo fizer parte da própria chave
+cadastrada.
 
 Também é possível navegar diretamente para métodos:
 
@@ -236,6 +237,17 @@ src.require('module.key.source').execute();
 
 var service = require('module.key.source')();
 service.execute();
+```
+
+Quando o factory atribuído a uma variável recebe aliases, a navegação resolve o
+valor mapeado — e não o nome do alias — antes de procurar ou baixar o source:
+
+```js
+var src = require('plusoftcrm.libs.main.source')({
+  'VSCodeUtils': 'inpaas.studio.vscode.utils'
+});
+
+src.require('VSCodeUtils').publishSource(args);
 ```
 
 A extensão resolve o método exportado e posiciona o editor em sua implementação.

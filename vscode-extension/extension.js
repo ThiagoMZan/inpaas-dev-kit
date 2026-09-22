@@ -812,25 +812,26 @@ function escapeRegExp(value) {
 function getRequiredSourceAtPosition(document, position) {
   const text = document.getText();
   const cursorOffset = document.offsetAt(position);
-  const requirePattern = /\brequire\s*\(\s*(['"])([^'"\r\n]+)\1\s*\)\s*(?:\(\s*\)\s*)?(?:\.\s*([A-Za-z_$][\w$]*))?/g;
+  const requirePattern = /(?:\b([A-Za-z_$][\w$]*)\s*\.\s*)?\brequire\s*\(\s*(['"])([^'"\r\n]+)\2\s*\)\s*(?:\(\s*\)\s*)?(?:\.\s*([A-Za-z_$][\w$]*))?/g;
   let match;
 
   while ((match = requirePattern.exec(text)) !== null) {
-    const keyOffset = match[0].indexOf(match[2]);
+    const keyOffset = match[0].indexOf(match[3]);
     const keyStart = match.index + keyOffset;
-    const keyEnd = keyStart + match[2].length;
+    const keyEnd = keyStart + match[3].length;
+    const key = resolveSourceRequireAlias(text, match[1], match[3], match.index);
 
     if (cursorOffset >= keyStart && cursorOffset <= keyEnd) {
-      return { key: match[2] };
+      return { key: key };
     }
 
-    if (match[3]) {
-      const methodOffset = match[0].lastIndexOf(match[3]);
+    if (match[4]) {
+      const methodOffset = match[0].lastIndexOf(match[4]);
       const methodStart = match.index + methodOffset;
-      const methodEnd = methodStart + match[3].length;
+      const methodEnd = methodStart + match[4].length;
 
       if (cursorOffset >= methodStart && cursorOffset <= methodEnd) {
-        return { key: match[2], method: match[3] };
+        return { key: key, method: match[4] };
       }
     }
   }
@@ -868,6 +869,33 @@ function getRequiredSourceAtPosition(document, position) {
   }
 
   return null;
+}
+
+function resolveSourceRequireAlias(text, objectName, key, beforeOffset) {
+  if (!objectName) return key;
+
+  const assignmentPattern = new RegExp(
+    '\\b(?:var|let|const)\\s+' + escapeRegExp(objectName) +
+    '\\s*=\\s*require\\s*\\(\\s*([\'\"])' +
+    '[^\'\"\\r\\n]+\\1\\s*\\)\\s*\\(\\s*\\{([\\s\\S]*?)\\}\\s*\\)',
+    'g'
+  );
+  let assignment;
+  let aliases = null;
+
+  while ((assignment = assignmentPattern.exec(text)) !== null) {
+    if (assignment.index > beforeOffset) break;
+    aliases = assignment[2];
+  }
+
+  if (!aliases) return key;
+
+  const aliasPattern = new RegExp(
+    '([\'\"])' + escapeRegExp(key) +
+    '\\1\\s*:\\s*([\'\"])([^\'\"\\r\\n]+)\\2'
+  );
+  const alias = aliasPattern.exec(aliases);
+  return alias ? alias[3] : key;
 }
 
 function sourceMethodPosition(document, methodName) {
@@ -942,7 +970,7 @@ async function resolveRequiredSource(document, position) {
 
   const requiredSource = getRequiredSourceAtPosition(document, position);
 
-  if (!requiredSource || requiredSource.key.toLowerCase().endsWith('.js')) {
+  if (!requiredSource) {
     return null;
   }
 

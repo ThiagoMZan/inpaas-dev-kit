@@ -73,7 +73,7 @@ Nenhum arquivo adicional registrado até o momento.
 
 Os assets são evidência de implementação, não recursos publicáveis do projeto.
 Comportamentos confirmados neles devem ser resumidos em
-`docs/form-design.md`, relacionando:
+`docs/form-design.md` do repositório `inpaas-ai-knowledge`, relacionando:
 
 ```text
 atributo/propriedade do XML
