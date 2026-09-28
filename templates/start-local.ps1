@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $devKitRoot = if ([string]::IsNullOrWhiteSpace($env:INPAAS_DEV_KIT_ROOT)) {
-  'C:\Users\tzan\www\inpaas-dev-kit'
+  Join-Path $PSScriptRoot '..\inpaas-dev-kit'
 }
 else {
   $env:INPAAS_DEV_KIT_ROOT

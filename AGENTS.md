@@ -11,12 +11,13 @@ separado `inpaas-ai-knowledge`. Antes de atuar em um projeto que use este kit,
 leia integralmente o `AGENTS.md` desse repositório e os documentos aplicáveis
 em `docs/`.
 
-No workspace de desenvolvimento padrão, a base está em:
+Mantenha os dois repositórios como pastas irmãs. A partir da raiz do kit, a
+base está em:
 
-`C:\Users\tzan\www\inpaas-ai-knowledge`
+`..\inpaas-ai-knowledge\AGENTS.md`
 
-Em outra máquina, mantenha os dois repositórios como pastas irmãs ou defina o
-caminho da base no `AGENTS.md` do projeto. Use
+Se essa estrutura não puder ser usada, defina o caminho da base no `AGENTS.md`
+do projeto. Use
 `scripts/update-ai-knowledge.ps1` para clonar ou atualizar a cópia irmã sem
 sobrescrever alterações locais.
 

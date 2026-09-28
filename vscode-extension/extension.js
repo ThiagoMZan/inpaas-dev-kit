@@ -621,27 +621,19 @@ function resolveInpaasResource(uri) {
     };
   }
 
-  const formsIndex = parts.findIndex(function (part) {
-    return part.toLowerCase() === 'forms';
-  });
-
-  if (formsIndex >= 0 && parts.length > formsIndex + 1) {
+  if (parts[0] && parts[0].toLowerCase() === 'forms' && parts.length >= 2 && parts.length <= 3) {
     return {
       type: 'form',
-      key: parts[formsIndex + 1],
+      key: parts[1],
       uri: uri,
       workspaceFolder: workspaceFolder
     };
   }
 
-  const formsVueIndex = parts.findIndex(function (part) {
-    return part.toLowerCase() === 'forms-vue';
-  });
-
-  if (formsVueIndex >= 0 && parts.length > formsVueIndex + 1) {
+  if (parts[0] && parts[0].toLowerCase() === 'forms-vue' && parts.length >= 2 && parts.length <= 3) {
     return {
       type: 'form',
-      key: parts[formsVueIndex + 1],
+      key: parts[1],
       uri: uri,
       workspaceFolder: workspaceFolder
     };
@@ -667,10 +659,8 @@ function resolveInpaasResource(uri) {
     };
   }
 
-  const modulesRoot = path.join(workspaceFolder.uri.fsPath, 'modules');
-  const moduleRelative = path.relative(modulesRoot, uri.fsPath).split(path.sep);
-  if (moduleRelative[0] && moduleRelative[0] !== '..' && moduleRelative.length <= 2) {
-    return { type: 'module', key: moduleRelative[0], uri: uri, workspaceFolder: workspaceFolder };
+  if (parts[0] && parts[0].toLowerCase() === 'modules' && parts.length >= 2 && parts.length <= 3) {
+    return { type: 'module', key: parts[1], uri: uri, workspaceFolder: workspaceFolder };
   }
 
   throw new Error('Selecione um recurso inPaaS no Explorer.');
