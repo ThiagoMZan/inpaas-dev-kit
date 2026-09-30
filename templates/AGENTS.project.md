@@ -12,6 +12,11 @@ documentos aplicáveis. Mantendo os repositórios como pastas irmãs, ela está 
 Se os repositórios não estiverem nessa estrutura, informe neste arquivo o
 caminho da base de conhecimento usada pelo projeto.
 
+Depois da base compartilhada, se existir, leia a base de conhecimento privada
+do usuário:
+
+`..\inpaas-private-knowledge\AGENTS.md`
+
 As regras abaixo são específicas deste projeto e complementam o kit central.
 
 ## Objetivo

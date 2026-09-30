@@ -3,6 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const vscode = require('vscode');
+const { normalizeDownloadedEntityModel } = require('./entity-model');
 
 const pendingDownloads = new Map();
 const metadataCache = new Map();
@@ -1533,8 +1534,7 @@ async function downloadEntityForWorkspace(workspaceFolder, name) {
     'Baixando entity "' + name + '" em ' + workspaceFolder.uri.fsPath
   );
 
-  const downloaded = await requestJson(url);
-  if (!downloaded || !downloaded.name) throw new Error('A API retornou um modelo de entity inválido.');
+  const downloaded = normalizeDownloadedEntityModel(await requestJson(url));
   const labelPrefix = 'label.' + String(downloaded.name).toLowerCase();
   downloaded.labels = {};
   const labelsUrl = new URL(
@@ -1552,6 +1552,11 @@ async function downloadEntityForWorkspace(workspaceFolder, name) {
   })).forEach(function (key) {
     key = String(key).toLowerCase();
     if (!downloaded.labels[key]) downloaded.labels[key] = { key: key, text: key, pending: false };
+  });
+  if (!downloaded.title) downloaded.title = downloaded.labels[labelPrefix].text;
+  downloaded.attributes.forEach(function (attribute) {
+    const key = labelPrefix + '.' + String(attribute.name || '').toLowerCase();
+    if (!attribute.title) attribute.title = downloaded.labels[key].text;
   });
   const fileName = String(downloaded.name).toLowerCase() + '.entity.json';
   const entitiesDirectory = getEntityRelativeDirectory(workspaceFolder);
